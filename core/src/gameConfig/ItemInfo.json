@@ -15948,5 +15948,30 @@
     "max_own": 99,
     "desc": "卖给商人后，可以获得金豆豆。",
     "effectDesc": "卖给商人后，可以获得金豆豆。"
+  },
+  {
+    "id": 1024,
+    "type": 0,
+    "name": "鹊羽",
+    "asset_name": "qixi_feather"
+  },
+  {
+    "id": 1025,
+    "type": 0,
+    "name": "鹊羽香囊",
+    "asset_name": "qixi_sachet"
+  },
+  {
+    "id": 1026,
+    "type": 0,
+    "name": "获赠鹊羽香囊",
+    "asset_name": "qixi_sachet_received"
+  },
+  {
+    "id": 301103,
+    "type": 0,
+    "name": "鹊羽灵露",
+    "interaction_type": "use",
+    "asset_name": "qixi_dew"
   }
 ]
