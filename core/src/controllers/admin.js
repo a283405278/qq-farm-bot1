@@ -42,6 +42,9 @@ const { registerAdminCaptureRoutes, setEmbeddedCapture } = require("./admin-capt
 const { createCaptureCore } = require("../capture/index");
 const { registerAdminCurrentUserRoutes } = require("./admin-current-user-routes");
 const {
+  registerAdminUserManageRoutes,
+} = require("./admin-user-manage-routes");
+const {
   registerAdminFarmOperationRoutes,
 } = require("./admin-farm-operation-routes");
 const {
@@ -71,7 +74,9 @@ const DEFAULT_ALLOWED_ORIGINS = [
 ];
 const PUBLIC_API_PATHS = new Set([
   "/login",
-  "/auto-login",
+  "/register",
+  "/card-claim/status",
+  "/card-claim/claim",
   "/qr/create",
   "/qr/check",
   "/game-version",
@@ -80,7 +85,6 @@ const PUBLIC_API_PATHS = new Set([
   "/health",
 ]);
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
-const ONE_MINUTE_MS = 60 * 1000;
 const LOG_SNAPSHOT_LIMIT = 100;
 const HTTP_REQUEST_TIMEOUT_MS = 120 * 1000;
 const HTTP_HEADERS_TIMEOUT_MS = 16 * 1000;
@@ -157,6 +161,7 @@ function registerAuthGate(expressApp, requireAdminToken) {
     if (
       PUBLIC_API_PATHS.has(req.path)
       || req.path.startsWith("/public/capture-certificate/")
+      || req.path.startsWith("/card/info/")
     ) return next();
     return requireAdminToken(req, res, next);
   });
@@ -347,6 +352,7 @@ function startAdminServer(dataProvider) {
   const adminSessionManager = createAdminSessionManager({
     logger: adminLogger,
     getIo: () => io,
+    userStore,
   });
   const {
     cleanupInvalidAdminSessions,
@@ -354,7 +360,6 @@ function startAdminServer(dataProvider) {
     getSession: getAdminSession,
     hasToken: hasAdminToken,
     invalidateAdminSessionAndDisconnect,
-    invalidateAdminSessions,
     requireAdminToken,
     updateAdminSessions,
   } = adminSessionManager;
@@ -383,6 +388,7 @@ function startAdminServer(dataProvider) {
     requireDangerConfirmation,
     requireSuperAdminRole,
     sendProviderError,
+    getAdminUserMutationError,
   } = adminRouteHelpers;
 
   const webDist = path.join(__dirname, "../../../web/dist");
@@ -418,6 +424,15 @@ function startAdminServer(dataProvider) {
     requireAdminToken,
     createAdminSession,
     updateAdminSessions,
+    requireAdminRole,
+  });
+  registerAdminUserManageRoutes({
+    app,
+    logger: adminLogger,
+    userStore,
+    requireAdminToken,
+    requireAdminRole,
+    getAdminUserMutationError,
   });
   registerHealthRoute(app);
   registerAuthGate(app, requireAdminToken);

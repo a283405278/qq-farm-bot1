@@ -72,4 +72,12 @@ export const menuRoutes: MenuItem[] = [
     icon: 'i-carbon-settings',
     component: () => import('@/views/Settings.vue'),
   },
+  {
+    path: 'admin-panel',
+    name: 'admin-panel',
+    label: '用户管理',
+    icon: 'i-carbon-tools',
+    component: () => import('@/views/AdminPanel.vue'),
+    adminOnly: true,
+  },
 ]

@@ -208,6 +208,88 @@ watch(
 )
 
 const showThemeDropdown = ref(false)
+const showRenewModal = ref(false)
+const renewCardCode = ref('')
+const renewLoading = ref(false)
+const renewError = ref('')
+const renewSuccess = ref(false)
+const renewCardInfo = ref<{ type: string, days: number, description: string } | null>(null)
+const renewChecking = ref(false)
+
+async function handleLogout() {
+  await userStore.logout()
+  router.push('/login')
+}
+
+async function checkCardInfo() {
+  if (!renewCardCode.value.trim()) {
+    renewError.value = '请输入卡密'
+    return
+  }
+  renewChecking.value = true
+  renewError.value = ''
+  renewCardInfo.value = null
+  try {
+    const res = await api.get(`/api/card/info/${renewCardCode.value.trim()}`)
+    if (res.data.ok) {
+      renewCardInfo.value = res.data.data
+    }
+    else {
+      renewError.value = res.data.error || '卡密不存在或已使用'
+    }
+  }
+  catch (e: any) {
+    renewError.value = e?.response?.data?.error || e?.message || '查询卡密失败'
+  }
+  finally {
+    renewChecking.value = false
+  }
+}
+
+async function handleRenew() {
+  if (!renewCardCode.value.trim()) {
+    renewError.value = '请输入卡密'
+    return
+  }
+  renewLoading.value = true
+  renewError.value = ''
+  renewSuccess.value = false
+  try {
+    const res: any = await userStore.renew(renewCardCode.value.trim())
+    if (res.ok) {
+      renewSuccess.value = true
+      renewCardCode.value = ''
+      renewCardInfo.value = null
+      setTimeout(() => {
+        showRenewModal.value = false
+        renewSuccess.value = false
+      }, 1500)
+    }
+    else {
+      renewError.value = res.error || '续费失败'
+    }
+  }
+  catch (e: any) {
+    renewError.value = e?.response?.data?.error || e?.message || '续费失败'
+  }
+  finally {
+    renewLoading.value = false
+  }
+}
+
+function openRenewModal() {
+  renewCardCode.value = ''
+  renewError.value = ''
+  renewSuccess.value = false
+  renewCardInfo.value = null
+  showRenewModal.value = true
+}
+
+function getDaysLabel(days: number) {
+  if (days === -1)
+    return '永久'
+  return `${days}天`
+}
 </script>
 
 <template>
@@ -274,6 +356,53 @@ const showThemeDropdown = ref(false)
       </router-link>
     </nav>
 
+    <!-- User Info -->
+    <div class="flex-none rounded-xl px-3 py-2.5" style="background: color-mix(in srgb, var(--surface-2) 80%, transparent);">
+      <div class="flex items-center justify-between gap-2">
+        <div class="min-w-0 flex items-center gap-2.5">
+          <div class="h-8 w-8 shrink-0 overflow-hidden rounded-full" style="outline: 2px solid var(--theme-primary); outline-offset: 2px;">
+            <img
+              src="/icon.png"
+              class="h-full w-full object-cover"
+            >
+          </div>
+          <div class="min-w-0">
+            <div class="truncate text-sm font-semibold" style="color: var(--theme-text);">
+              {{ userStore.username || '未登录' }}
+            </div>
+            <div class="text-[11px] opacity-55" style="color: var(--theme-text);">
+              {{ userStore.isAdmin ? '管理员' : `用户 · 额度 ${userStore.accountLimit}` }}
+            </div>
+          </div>
+        </div>
+        <div class="flex shrink-0 items-center gap-1">
+          <button
+            v-if="!userStore.isAdmin"
+            class="h-8 w-8 flex items-center justify-center rounded-lg transition-colors hover:bg-gray-200/60 dark:hover:bg-gray-700/60"
+            :title="userStore.isExpired ? '账号已过期，请续费' : '续费'"
+            @click="openRenewModal"
+          >
+            <div class="i-carbon-renew text-sm" :style="{ color: userStore.isExpired ? '#ef4444' : 'var(--theme-primary)' }" />
+          </button>
+          <button
+            class="h-8 w-8 flex items-center justify-center rounded-lg transition-colors hover:bg-gray-200/60 dark:hover:bg-gray-700/60"
+            title="退出登录"
+            @click="handleLogout"
+          >
+            <div class="i-carbon-logout text-sm" :style="{ color: 'var(--theme-text)' }" />
+          </button>
+        </div>
+      </div>
+      <div v-if="userStore.userCard" class="mt-2 flex items-center justify-between border-t pt-2 text-[11px]" style="border-color: color-mix(in srgb, var(--theme-text) 10%, transparent); color: var(--theme-text);">
+        <span class="opacity-55">
+          {{ getDaysLabel(userStore.userCard.days) }} · {{ userStore.accountLimit }} 额度
+        </span>
+        <span :class="userStore.isExpired ? 'text-red-500' : 'opacity-80'" :style="userStore.isExpired ? {} : { color: 'var(--theme-primary)' }">
+          {{ userStore.expireTimeText }}
+        </span>
+      </div>
+    </div>
+
     <!-- Footer Status -->
     <div class="relative mt-4 flex-none rounded-xl px-3 py-2.5" style="background: color-mix(in srgb, var(--surface-2) 80%, transparent);">
       <div class="flex items-center justify-between text-xs">
@@ -333,6 +462,65 @@ const showThemeDropdown = ref(false)
       </div>
     </div>
   </aside>
+
+  <Teleport to="body">
+    <Transition name="modal-fade">
+      <div
+        v-if="showRenewModal"
+        class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
+        @click.self="showRenewModal = false"
+      >
+        <div class="max-w-md w-full rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-800">
+          <div class="mb-4 flex items-center justify-between">
+            <h3 class="text-lg font-bold" style="color: var(--theme-text);">
+              续费卡密
+            </h3>
+            <button
+              class="h-8 w-8 flex items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+              @click="showRenewModal = false"
+            >
+              <div class="i-carbon-close text-lg" />
+            </button>
+          </div>
+          <div class="space-y-3">
+            <input
+              v-model="renewCardCode"
+              type="text"
+              placeholder="请输入卡密"
+              class="farm-input w-full border border-gray-200 rounded-xl bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+              @keyup.enter="handleRenew"
+            >
+            <div class="flex gap-2">
+              <button
+                class="flex-1 rounded-xl bg-gray-100 py-2 text-sm font-medium transition dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
+                :disabled="renewChecking"
+                @click="checkCardInfo"
+              >
+                {{ renewChecking ? '查询中...' : '查询' }}
+              </button>
+              <button
+                class="flex-1 rounded-xl py-2 text-sm text-white font-medium transition disabled:opacity-50"
+                style="background: var(--theme-gradient);"
+                :disabled="renewLoading"
+                @click="handleRenew"
+              >
+                {{ renewLoading ? '续费中...' : '确认续费' }}
+              </button>
+            </div>
+            <p v-if="renewCardInfo" class="rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-700/50" style="color: var(--theme-text);">
+              {{ renewCardInfo.days }}天 · {{ renewCardInfo.description || renewCardInfo.type }}
+            </p>
+            <p v-if="renewError" class="text-sm text-red-500">
+              {{ renewError }}
+            </p>
+            <p v-if="renewSuccess" class="text-sm text-green-500">
+              续费成功！
+            </p>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -396,5 +584,15 @@ const showThemeDropdown = ref(false)
   transform: translateY(-50%);
   border-radius: 0 4px 4px 0;
   background: var(--theme-gradient);
+}
+
+.modal-fade-enter-active,
+.modal-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.modal-fade-enter-from,
+.modal-fade-leave-to {
+  opacity: 0;
 }
 </style>
