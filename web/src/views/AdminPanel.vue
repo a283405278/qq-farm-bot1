@@ -77,6 +77,12 @@ const cardClaimCardOptions = computed(() => {
   return [{ value: '', label: '自动选择首张可用时间卡' }, ...items]
 })
 
+const activeClaimCard = computed(() => {
+  if (!cardClaimCardCode.value)
+    return null
+  return cards.value.find(card => card.code === cardClaimCardCode.value) || null
+})
+
 const filteredCards = computed(() => {
   let result = cards.value
 
@@ -372,6 +378,10 @@ function getCardValueLabel(card: Card) {
   if (card.days === -1)
     return '永久'
   return `${card.days}天`
+}
+
+function isClaimTargetCard(card: Card) {
+  return cardClaimEnabled.value && !!cardClaimCardCode.value && card.code === cardClaimCardCode.value
 }
 
 function exportCardsToFile(cardsToExport: Card[], filename?: string) {
@@ -795,6 +805,17 @@ onMounted(() => {
                   {{ option.label }}
                 </option>
               </select>
+              <div class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                <template v-if="cardClaimEnabled && activeClaimCard">
+                  当前固定发放：<span class="font-medium text-amber-600 dark:text-amber-300">{{ activeClaimCard.code }}</span>
+                </template>
+                <template v-else-if="cardClaimEnabled">
+                  当前发放策略：<span class="font-medium text-emerald-600 dark:text-emerald-300">自动选择首张可用时间卡</span>
+                </template>
+                <template v-else>
+                  当前发放策略：功能未开启
+                </template>
+              </div>
             </div>
             <div class="flex shrink-0 items-center gap-2">
               <BaseButton variant="secondary" size="sm" :loading="cardClaimLoading" @click="saveCardClaimCardCode">
@@ -930,7 +951,12 @@ onMounted(() => {
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-                  <tr v-for="card in filteredCards" :key="card.code" class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                  <tr
+                    v-for="card in filteredCards"
+                    :key="card.code"
+                    class="hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                    :class="isClaimTargetCard(card) ? 'bg-amber-50/80 dark:bg-amber-900/10' : ''"
+                  >
                     <td class="px-3 py-2">
                       <input
                         :checked="selectedCards.has(card.code)"
@@ -940,7 +966,15 @@ onMounted(() => {
                       >
                     </td>
                     <td class="whitespace-nowrap px-4 py-2">
-                      <code class="rounded bg-gray-100 px-2 py-0.5 text-xs dark:bg-gray-700">{{ card.code }}</code>
+                      <div class="flex items-center gap-2">
+                        <code class="rounded bg-gray-100 px-2 py-0.5 text-xs dark:bg-gray-700">{{ card.code }}</code>
+                        <span
+                          v-if="isClaimTargetCard(card)"
+                          class="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800 dark:bg-amber-900/50 dark:text-amber-200"
+                        >
+                          免费发放中
+                        </span>
+                      </div>
                     </td>
                     <td class="whitespace-nowrap px-4 py-2 text-sm text-gray-900 dark:text-white">
                       {{ card.description }}
