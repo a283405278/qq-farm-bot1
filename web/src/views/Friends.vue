@@ -5,6 +5,7 @@ import { storeToRefs } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import api from '@/api'
 import ConfirmModal from '@/components/ConfirmModal.vue'
+import FriendsAddBoard from '@/components/friends/FriendsAddBoard.vue'
 import FriendsFriendList from '@/components/friends/FriendsFriendList.vue'
 import FriendsPageHeader from '@/components/friends/FriendsPageHeader.vue'
 import FriendsSyncSettings from '@/components/friends/FriendsSyncSettings.vue'
@@ -37,11 +38,13 @@ const {
   friendsListCacheTtlSec,
   knownFriendSettingsLoading,
   knownFriendSettingsSaving,
+  friendPosts,
 } = storeToRefs(friendStore)
 const { status, loading: statusLoading, realtimeConnected, currentStatusReady } = storeToRefs(statusStore)
 
 const TABS = [
   { key: 'friends', label: '好友列表', icon: 'i-carbon-user-multiple' },
+  { key: 'posts', label: '互加好友', icon: 'i-carbon-add-alt' },
   { key: 'blacklist', label: '好友黑名单', icon: 'i-carbon-list-blocked' },
   { key: 'visitors', label: '最近访客', icon: 'i-carbon-user-activity' },
 ] as const
@@ -614,6 +617,13 @@ function parseBatchGids(input: string): number[] {
   return gids
 }
 
+async function handlePostAdded() {
+  if (!currentAccountId.value)
+    return
+  await friendStore.fetchFriends(currentAccountId.value, true)
+  toast.success('已添加好友 GID，正在同步好友信息')
+}
+
 async function handleBatchAddKnownFriendGids() {
   if (!currentAccountId.value)
     return
@@ -642,6 +652,7 @@ async function handleBatchAddKnownFriendGids() {
       :blacklist-count="blacklist.length"
       :interact-records-count="interactRecords.length"
       :filtered-interact-records-count="filteredInteractRecords.length"
+      :friend-posts-count="friendPosts.length"
     />
 
     <FriendsTabs
@@ -772,6 +783,13 @@ async function handleBatchAddKnownFriendGids() {
             @friend-avatar-error="handleFriendAvatarError"
           />
         </template>
+      </div>
+
+      <div v-else-if="activeTab === 'posts'">
+        <FriendsAddBoard
+          :account-id="currentAccountId"
+          @added="handlePostAdded"
+        />
       </div>
 
       <div v-else-if="activeTab === 'blacklist'" class="space-y-4">

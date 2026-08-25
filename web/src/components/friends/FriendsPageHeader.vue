@@ -8,6 +8,7 @@ defineProps<{
   blacklistCount: number
   interactRecordsCount: number
   filteredInteractRecordsCount: number
+  friendPostsCount: number
 }>()
 
 const searchKeyword = defineModel<string>('searchKeyword', { required: true })
@@ -39,6 +40,9 @@ const searchKeyword = defineModel<string>('searchKeyword', { required: true })
       </div>
       <div v-if="activeTab === 'visitors' && interactRecordsCount" class="text-sm text-gray-500">
         共 {{ filteredInteractRecordsCount }}/{{ interactRecordsCount }} 条记录
+      </div>
+      <div v-if="activeTab === 'posts'" class="text-sm text-gray-500">
+        共 {{ friendPostsCount }} 条发布
       </div>
     </div>
   </div>

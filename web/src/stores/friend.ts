@@ -15,6 +15,19 @@ export interface KnownFriendSettings {
   friendsListCacheTtlSec: number
 }
 
+export interface FriendPost {
+  id: string
+  username: string
+  gid: number
+  nick: string
+  platform: 'qq' | 'wx'
+  remark: string
+  createdAt: number
+  updatedAt: number
+  isMine: boolean
+  isKnown: boolean
+}
+
 export const useFriendStore = defineStore('friend', () => {
   const friends = ref<any[]>([])
   const loading = ref(false)
@@ -32,6 +45,12 @@ export const useFriendStore = defineStore('friend', () => {
   const knownFriendSettingsLoading = ref(false)
   const knownFriendSettingsSaving = ref(false)
 
+  const friendPosts = ref<FriendPost[]>([])
+  const friendPostsLoading = ref(false)
+  const friendPostsSaving = ref(false)
+  const friendPostsAdding = ref<Record<string, boolean>>({})
+  const friendPostsError = ref('')
+
   function clearFriendData() {
     friends.value = []
     friendLands.value = {}
@@ -42,6 +61,8 @@ export const useFriendStore = defineStore('friend', () => {
     knownFriendGids.value = []
     knownFriendGidSyncCooldownSec.value = 600
     friendsListCacheTtlSec.value = 60
+    friendPosts.value = []
+    friendPostsError.value = ''
   }
 
   function isCurrentAccount(accountId: string) {
@@ -367,6 +388,94 @@ export const useFriendStore = defineStore('friend', () => {
     }
   }
 
+  async function fetchFriendPosts() {
+    friendPostsLoading.value = true
+    friendPostsError.value = ''
+    try {
+      const res = await api.get('/api/friend-posts')
+      if (res.data.ok) {
+        friendPosts.value = Array.isArray(res.data.data) ? res.data.data : []
+      }
+      else {
+        friendPostsError.value = res.data.error || '加载加好友发布信息失败'
+      }
+    }
+    catch (e: any) {
+      friendPostsError.value = e?.response?.data?.error || e?.message || '加载加好友发布信息失败'
+    }
+    finally {
+      friendPostsLoading.value = false
+    }
+  }
+
+  async function publishFriendPost(payload: { gid: number | string, nick: string, platform: string, remark: string }) {
+    if (!payload || !Number(payload.gid))
+      return { ok: false, message: '请输入有效的游戏 GID' }
+    friendPostsSaving.value = true
+    try {
+      const res = await api.post('/api/friend-posts', {
+        gid: Number(payload.gid),
+        nick: payload.nick,
+        platform: payload.platform,
+        remark: payload.remark,
+      })
+      if (res.data.ok) {
+        const post = res.data.data
+        const idx = friendPosts.value.findIndex(p => p.id === post.id)
+        if (idx >= 0)
+          friendPosts.value[idx] = post
+        else
+          friendPosts.value.unshift(post)
+      }
+      return { ok: !!res.data.ok, message: res.data.error || '' }
+    }
+    catch (e: any) {
+      return { ok: false, message: e?.response?.data?.error || e?.message || '发布失败' }
+    }
+    finally {
+      friendPostsSaving.value = false
+    }
+  }
+
+  async function removeMyFriendPost() {
+    friendPostsSaving.value = true
+    try {
+      const res = await api.delete('/api/friend-posts')
+      if (res.data.ok)
+        friendPosts.value = friendPosts.value.filter(p => !p.isMine)
+      return { ok: !!res.data.ok }
+    }
+    catch (e: any) {
+      return { ok: false, message: e?.response?.data?.error || e?.message || '删除失败' }
+    }
+    finally {
+      friendPostsSaving.value = false
+    }
+  }
+
+  async function addFriendFromPost(accountId: string, postId: string) {
+    if (!accountId || !postId)
+      return { ok: false, message: '参数无效' }
+    friendPostsAdding.value[postId] = true
+    try {
+      const res = await api.post(`/api/friend-posts/${postId}/add`, {}, {
+        headers: { 'x-account-id': accountId },
+      })
+      if (res.data.ok) {
+        friendPosts.value = friendPosts.value.map(p => (
+          p.id === postId ? { ...p, isKnown: true } : p
+        ))
+      }
+      return { ok: !!res.data.ok, added: !!res.data.added, message: res.data.message || res.data.error || '' }
+    }
+    catch (e: any) {
+      return { ok: false, message: e?.response?.data?.error || e?.message || '添加失败' }
+    }
+    finally {
+      delete friendPostsAdding.value[postId]
+    }
+  }
+
   return {
     friends,
     loading,
@@ -382,6 +491,11 @@ export const useFriendStore = defineStore('friend', () => {
     friendsListCacheTtlSec,
     knownFriendSettingsLoading,
     knownFriendSettingsSaving,
+    friendPosts,
+    friendPostsLoading,
+    friendPostsSaving,
+    friendPostsAdding,
+    friendPostsError,
     clearFriendData,
     fetchFriends,
     fetchFriendsDogInfo,
@@ -396,5 +510,9 @@ export const useFriendStore = defineStore('friend', () => {
     removeKnownFriendGid,
     batchAddKnownFriendGids,
     removeUnsyncedKnownFriendGids,
+    fetchFriendPosts,
+    publishFriendPost,
+    removeMyFriendPost,
+    addFriendFromPost,
   }
 })

@@ -54,6 +54,7 @@ const {
   registerAdminFarmResourceRoutes,
 } = require("./admin-farm-resource-routes");
 const { registerAdminFriendRoutes } = require("./admin-friend-routes");
+const { registerAdminFriendPostRoutes } = require("./admin-friend-post-routes");
 const { registerAdminIllustratedRoutes } = require("./admin-illustrated-routes");
 const { registerAdminPetRoutes } = require("./admin-pet-routes");
 const {
@@ -471,6 +472,14 @@ function startAdminServer(dataProvider) {
     app,
     provider,
     store,
+    getAccountIdFromRequest,
+    canAccessAccount,
+    sendProviderError,
+  });
+  registerAdminFriendPostRoutes({
+    app,
+    store,
+    provider,
     getAccountIdFromRequest,
     canAccessAccount,
     sendProviderError,

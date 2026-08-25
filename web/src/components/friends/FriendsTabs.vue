@@ -1,5 +1,5 @@
 <script setup lang="ts">
-export type FriendTabKey = 'friends' | 'blacklist' | 'visitors'
+export type FriendTabKey = 'friends' | 'blacklist' | 'visitors' | 'posts'
 
 export interface FriendTabItem {
   key: FriendTabKey
