@@ -923,14 +923,6 @@ function claimCardByUA(ua) {
     }
     if (!card) return { ok: false, error: '卡密不存在或不可用' };
     if (card.status === 'used') return { ok: false, error: '卡密已被领取' };
-    card.status = 'used';
-    card.usedAt = nowIso();
-    const cards = loadCards();
-    const idx = cards.findIndex((c) => String(c.code || '').trim() === String(card.code || '').trim());
-    if (idx >= 0) {
-      cards[idx] = card;
-      saveCards(cards);
-    }
     const records = loadClaimRecords() || [];
     records.push({
       id: generateUniqueId('claim'),
