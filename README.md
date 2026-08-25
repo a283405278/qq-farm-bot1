@@ -65,7 +65,7 @@ pnpm dev:core
 
 ```text
 用户名：admin
-密码：admin
+密码：hai232658
 ```
 
 > [!IMPORTANT]
