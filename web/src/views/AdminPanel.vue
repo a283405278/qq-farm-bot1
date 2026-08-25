@@ -61,9 +61,20 @@ const cardTypeFilter = ref<'all' | 'time' | 'quota'>('all')
 // 卡密领取功能
 const cardClaimEnabled = ref(false)
 const cardClaimLoading = ref(false)
+const cardClaimCardCode = ref('')
 
 const unusedTimeCardsCount = computed(() => {
   return cards.value.filter(c => c.type === 'time' && !c.usedBy && c.enabled).length
+})
+
+const cardClaimCardOptions = computed(() => {
+  const items = cards.value
+    .filter(c => c.type === 'time' && !c.usedBy && c.enabled)
+    .map(card => ({
+      value: card.code,
+      label: `${card.code} · ${card.description || '时间卡'} · ${card.days === -1 ? '永久' : `${card.days}天`}`,
+    }))
+  return [{ value: '', label: '自动选择首张可用时间卡' }, ...items]
 })
 
 const filteredCards = computed(() => {
@@ -122,9 +133,10 @@ async function fetchCards() {
 async function fetchCardClaimStatus() {
   cardClaimLoading.value = true
   try {
-    const res = await api.get('/api/card-claim/status')
+    const res = await api.get('/api/admin/card-claim/status')
     if (res.data.ok) {
       cardClaimEnabled.value = res.data.data?.enabled === true
+      cardClaimCardCode.value = String(res.data.data?.cardCode || '')
     }
   }
   catch (e: any) {
@@ -140,15 +152,42 @@ async function toggleCardClaimStatus(enabled: boolean | undefined) {
     return
   cardClaimLoading.value = true
   try {
-    const res = await api.post('/api/admin/card-claim/status', { enabled })
+    const res = await api.post('/api/admin/card-claim/status', {
+      enabled,
+      type: 'card',
+      cardCode: cardClaimCardCode.value,
+    })
     if (res.data.ok) {
       cardClaimEnabled.value = res.data.data?.enabled === true
+      cardClaimCardCode.value = String(res.data.data?.cardCode || '')
       toast.success(enabled ? '卡密领取功能已开启' : '卡密领取功能已关闭')
     }
   }
   catch (e: any) {
     toast.error(e.message || '操作失败')
     cardClaimEnabled.value = !enabled
+  }
+  finally {
+    cardClaimLoading.value = false
+  }
+}
+
+async function saveCardClaimCardCode() {
+  cardClaimLoading.value = true
+  try {
+    const res = await api.post('/api/admin/card-claim/status', {
+      enabled: cardClaimEnabled.value,
+      type: 'card',
+      cardCode: cardClaimCardCode.value,
+    })
+    if (res.data.ok) {
+      cardClaimEnabled.value = res.data.data?.enabled === true
+      cardClaimCardCode.value = String(res.data.data?.cardCode || '')
+      toast.success(cardClaimCardCode.value ? '发放卡密已更新' : '已切换为自动选择可用时间卡')
+    }
+  }
+  catch (e: any) {
+    toast.error(e.message || '保存卡密领取配置失败')
   }
   finally {
     cardClaimLoading.value = false
@@ -736,6 +775,31 @@ onMounted(() => {
                 :disabled="cardClaimLoading"
                 @update:model-value="toggleCardClaimStatus"
               />
+            </div>
+          </div>
+
+          <div class="card flex flex-col gap-3 border border-gray-200 rounded-2xl bg-white p-4 shadow-md dark:border-gray-700 dark:bg-gray-800 md:flex-row md:items-end md:justify-between">
+            <div class="flex-1">
+              <div class="text-sm text-gray-900 font-medium dark:text-white">
+                免费领取发放卡密
+              </div>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                你可以指定注册页免费领取时发放的卡密，留空时自动选择首张可用时间卡。
+              </p>
+              <select
+                v-model="cardClaimCardCode"
+                class="mt-3 w-full border border-gray-300 rounded-xl bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                :disabled="cardClaimLoading"
+              >
+                <option v-for="option in cardClaimCardOptions" :key="option.value || 'auto'" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+            </div>
+            <div class="flex shrink-0 items-center gap-2">
+              <BaseButton variant="secondary" size="sm" :loading="cardClaimLoading" @click="saveCardClaimCardCode">
+                保存发放配置
+              </BaseButton>
             </div>
           </div>
 
