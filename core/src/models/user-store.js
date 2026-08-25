@@ -914,8 +914,13 @@ function claimCardByUA(ua) {
     return { ok: false, error: '当前未开启免费卡密领取' };
   }
   if (status.type === 'card') {
-    if (!status.cardCode) return { ok: false, error: '卡密未配置' };
-    const card = getOneCard(status.cardCode);
+    let card = null;
+    if (status.cardCode) {
+      card = getOneCard(status.cardCode);
+    }
+    if (!card) {
+      card = loadCards().find(c => c && normalizeCardType(c.type) === 'time' && c.enabled !== false && (!c.status || c.status === 'unused') && !c.usedBy) || null;
+    }
     if (!card) return { ok: false, error: '卡密不存在或不可用' };
     if (card.status === 'used') return { ok: false, error: '卡密已被领取' };
     card.status = 'used';
