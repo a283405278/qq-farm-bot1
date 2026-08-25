@@ -37,7 +37,7 @@ function registerAdminAuthRoutes({
     if (userStore.checkLoginRateLimit(ip)) {
       return res
         .status(429)
-        .json({ ok: false, error: "登录尝试过于频繁，请稍后再试" });
+        .json({ ok: false, error: "登录尝试过于频繁，请稍后再试", errorType: 'rate_limit', code: 'RATE_LIMIT' });
     }
 
     const user = userStore.findUser(username);
@@ -69,7 +69,7 @@ function registerAdminAuthRoutes({
       const lockout = userStore.checkAccountLockout(username);
       return res
         .status(401)
-        .json({ ok: false, error: "用户名或密码错误", lockout });
+        .json({ ok: false, error: "用户名或密码错误", errorType: 'invalid_credentials', lockout });
     }
 
     const lockout = userStore.checkAccountLockout(username);
@@ -83,7 +83,7 @@ function registerAdminAuthRoutes({
       });
       return res
         .status(403)
-        .json({ ok: false, error: "账号已被锁定，请稍后再试", lockout });
+        .json({ ok: false, error: "账号已被锁定，请稍后再试", errorType: 'locked', lockout });
     }
 
     const elevated = hasElevatedRole(user);
@@ -130,11 +130,16 @@ function registerAdminAuthRoutes({
       ok: true,
       data: {
         token,
+        role: userInfo.role,
+        card: userInfo.card,
+        accountLimit: userInfo.accountLimit,
+        mustChangePassword: userInfo.mustChangePassword === true,
         user: {
           username: userInfo.username,
           role: userInfo.role,
           card: userInfo.card,
           accountLimit: userInfo.accountLimit,
+          mustChangePassword: userInfo.mustChangePassword === true,
         },
       },
     });
@@ -237,6 +242,8 @@ function registerAdminAuthRoutes({
         username: result.data.username,
         expiresAt: result.data.expiresAt,
         card: refreshed ? refreshed.card : null,
+        accountLimit: refreshed ? refreshed.accountLimit : currentUser.accountLimit,
+        cardType: result.data.cardType,
       },
     });
   });

@@ -136,12 +136,18 @@ function validateForm(): boolean {
 }
 
 function applyLoginError(result: any) {
-  if (result?.code === 'BANNED' || result?.code === 'EXPIRED') {
+  if (result?.errorType === 'rate_limit' || result?.code === 'RATE_LIMIT') {
+    error.value = result.error || '请求过于频繁，请稍后重试'
+    const ms = result.remainingMs
+    if (ms)
+      rateLimitRemaining.value = Math.ceil(ms / 1000)
+  }
+  else if (result?.code === 'BANNED' || result?.code === 'EXPIRED') {
     error.value = result.error || '账号不可用'
   }
-  else if (result?.lockout?.locked) {
+  else if (result?.errorType === 'locked' || result?.lockout?.locked) {
     error.value = result.error || '账号已被锁定'
-    const ms = result.lockout.lockRemainingMs
+    const ms = result.remainingMs || result?.lockout?.lockRemainingMs
     if (ms)
       lockoutRemaining.value = Math.ceil(ms / 1000 / 60)
   }
@@ -162,7 +168,10 @@ async function handleSubmit() {
     if (isLogin.value) {
       const result: any = await userStore.login(username.value, password.value)
       if (result.ok) {
-        success.value = '登录成功，正在跳转...'
+        if (result.data?.mustChangePassword)
+          success.value = '登录成功！请修改默认密码以确保账户安全'
+        else
+          success.value = '登录成功，正在跳转...'
         setTimeout(() => {
           window.location.href = '/'
         }, 500)
@@ -186,7 +195,10 @@ async function handleSubmit() {
   }
   catch (e: any) {
     const data = e.response?.data
-    error.value = data?.error || e.message || '操作异常'
+    if (data)
+      applyLoginError(data)
+    else
+      error.value = e.message || '操作异常'
   }
   finally {
     loading.value = false

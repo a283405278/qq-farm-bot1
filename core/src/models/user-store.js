@@ -48,6 +48,12 @@ const LETTERS_RE = /[a-z]/i;
 const DIGITS_RE = /\d/;
 const SYMBOLS_RE = /[^a-z0-9]/i;
 
+function normalizeCardType(type) {
+  const normalized = String(type || '').trim().toLowerCase();
+  if (normalized === 'quota') return 'quota';
+  return 'time';
+}
+
 /* ------------------------------------------------------------------------- *
  * 基础文件读写工具
  * ------------------------------------------------------------------------- */
@@ -341,6 +347,7 @@ function initDefaultAdmin() {
     accountLimit: DEFAULT_ACCOUNT_LIMIT,
     card: null,
     note: '系统默认管理员，请尽快修改密码',
+    mustChangePassword: true,
     createdAt: nowIso(),
   });
   saveUsers(users);
@@ -370,7 +377,7 @@ function getCardInfo(code) {
   if (!card) return null;
   return {
     code: card.code,
-    type: card.type || 'standard',
+    type: normalizeCardType(card.type),
     days: card.days || 0,
     status: card.status || 'unused',
     description: card.description || '',
@@ -381,7 +388,7 @@ function getCardInfo(code) {
 }
 
 function getAllCards() {
-  return loadCards();
+  return loadCards().map(card => ({ ...card, type: normalizeCardType(card.type) }));
 }
 
 function createCard(payload) {
@@ -392,7 +399,7 @@ function createCard(payload) {
   }
   const card = {
     code,
-    type: (payload && payload.type) || 'standard',
+    type: normalizeCardType(payload && payload.type),
     days: Number((payload && payload.days) || 0),
     description: (payload && payload.description) || '',
     status: 'unused',
@@ -421,7 +428,7 @@ function updateCard(code, update) {
   const card = cards.find((c) => c && String(c.code || '').trim() === String(code || '').trim());
   if (!card) return { ok: false, error: '卡密不存在' };
   if (update) {
-    if (typeof update.type === 'string' && update.type.trim()) card.type = update.type.trim();
+    if (typeof update.type === 'string' && update.type.trim()) card.type = normalizeCardType(update.type);
     if (typeof update.days === 'number') card.days = Math.max(0, update.days);
     if (typeof update.description === 'string') card.description = update.description;
     if (typeof update.enabled === 'boolean') card.enabled = update.enabled;
@@ -463,6 +470,7 @@ function getUser(username) {
   let card = null;
   if (user.cardCode) {
     card = findCardByCode(user.cardCode);
+    if (card) card = { ...card, type: normalizeCardType(card.type) };
   }
   return {
     ...user,
@@ -483,7 +491,7 @@ function getUserSnapshot(username) {
     card: {
       enabled: card ? card.enabled !== false : false,
       expiresAt: card ? card.expiresAt || null : null,
-      type: card ? card.type || 'standard' : 'none',
+      type: card ? normalizeCardType(card.type) : 'none',
       days: card ? card.days || 0 : 0,
     },
   };
@@ -501,7 +509,7 @@ function getAllUsers() {
       card: card
         ? {
             code: card.code,
-            type: card.type || 'standard',
+            type: normalizeCardType(card.type),
             days: card.days || 0,
             description: card.description || '',
             expiresAt: card.expiresAt || '',
@@ -553,9 +561,12 @@ function registerUserWithCard({ username, password, cardCode }) {
   const card = getOneCard(cardCode);
   if (!card) return { ok: false, error: '卡密不存在或不可用' };
   if (card.status === 'used') return { ok: false, error: '卡密已被使用' };
+  if (normalizeCardType(card.type) === 'quota') {
+    return { ok: false, error: '注册只能使用时间卡密，额度卡密请登录后在续费中使用' };
+  }
 
   const { salt, hash } = hashPassword(password);
-  const expiresAt = calculateExpiry(null, card.days);
+  const expiresAt = Number(card.days) === -1 ? null : calculateExpiry(null, card.days);
 
   const user = {
     username: normalizedUsername,
@@ -565,6 +576,7 @@ function registerUserWithCard({ username, password, cardCode }) {
     accountLimit: DEFAULT_ACCOUNT_LIMIT,
     cardCode: card.code,
     note: '',
+    mustChangePassword: false,
     createdAt: nowIso(),
   };
   const users = loadUsers();
@@ -596,12 +608,11 @@ function renewUser({ username, cardCode }) {
   if (!card) return { ok: false, error: '卡密不存在或不可用' };
   if (card.status === 'used') return { ok: false, error: '卡密已被使用' };
 
+  const cardType = normalizeCardType(card.type);
   const existingCard = user.cardCode ? findCardByCode(user.cardCode) : null;
-  const baseMs = existingCard && existingCard.expiresAt ? safeDateMs(existingCard.expiresAt) : 0;
-  const newExpiresAt = calculateExpiry(baseMs, card.days);
-
+  let newExpiresAt = existingCard && existingCard.expiresAt ? existingCard.expiresAt : null;
   let boundCard = existingCard;
-  if (!user.cardCode) {
+  if (cardType === 'time' && !user.cardCode) {
     const users = loadUsers();
     const savedUser = users.find(
       (u) => String(u.username || '').toLowerCase() === String(user.username || '').toLowerCase(),
@@ -613,6 +624,25 @@ function renewUser({ username, cardCode }) {
     }
   }
 
+  if (cardType === 'quota') {
+    const users = loadUsers();
+    const savedUser = users.find(
+      (u) => String(u.username || '').toLowerCase() === String(user.username || '').toLowerCase(),
+    );
+    if (savedUser) {
+      const currentLimit = Number(savedUser.accountLimit) > 0 ? Number(savedUser.accountLimit) : DEFAULT_ACCOUNT_LIMIT;
+      savedUser.accountLimit = currentLimit + Math.max(0, Number(card.days) || 0);
+      saveUsers(users);
+    }
+  }
+  else if (Number(card.days) === -1 || (boundCard && Number(boundCard.days) === -1)) {
+    newExpiresAt = null;
+  }
+  else {
+    const baseMs = boundCard && boundCard.expiresAt ? safeDateMs(boundCard.expiresAt) : 0;
+    newExpiresAt = calculateExpiry(baseMs, card.days);
+  }
+
   const cards = loadCards();
   const consumedCard = cards.find(
     (c) => String(c.code || '').trim() === String(card.code || '').trim(),
@@ -622,15 +652,15 @@ function renewUser({ username, cardCode }) {
     consumedCard.usedBy = user.username;
     consumedCard.usedAt = nowIso();
   }
-  if (boundCard) {
+  if (cardType === 'time' && boundCard) {
     const boundIdx = cards.findIndex(
       (c) => String(c.code || '').trim() === String(boundCard.code || '').trim(),
     );
     if (boundIdx >= 0) {
       const bound = cards[boundIdx];
       bound.expiresAt = newExpiresAt;
-      if (bound.type === 'standard' || !bound.type) {
-        bound.type = card.type || 'standard';
+      if (normalizeCardType(bound.type) === 'time') {
+        bound.type = normalizeCardType(card.type);
         bound.days = card.days || bound.days || 0;
         bound.description = card.description || bound.description || '';
       }
@@ -646,7 +676,8 @@ function renewUser({ username, cardCode }) {
     data: {
       username: user.username,
       expiresAt: newExpiresAt,
-      card: updatedCard || null,
+      cardType,
+      card: updatedCard ? { ...updatedCard, type: normalizeCardType(updatedCard.type) } : null,
     },
   };
 }
@@ -767,6 +798,7 @@ function changePassword({ username, oldPassword, newPassword }) {
   if (savedUser) {
     savedUser.passwordSalt = salt;
     savedUser.passwordHash = hash;
+    if (savedUser.mustChangePassword) savedUser.mustChangePassword = false;
     saveUsers(users);
   }
   resetLoginAttempts(username);
@@ -810,6 +842,7 @@ function addUser({ username, password, role, accountLimit, note }) {
     accountLimit: Number(accountLimit) > 0 ? Number(accountLimit) : DEFAULT_ACCOUNT_LIMIT,
     cardCode: '',
     note: note || '',
+    mustChangePassword: false,
     createdAt: nowIso(),
   });
   saveUsers(users);
@@ -898,14 +931,14 @@ function claimCardByUA(ua) {
       id: generateUniqueId('claim'),
       ua,
       cardCode: card.code,
-      type: card.type || 'standard',
+      type: normalizeCardType(card.type),
       days: card.days || 0,
       createdAt: nowIso(),
     });
     saveClaimData(status, records);
     return {
       ok: true,
-      data: { cardCode: card.code, type: card.type, days: card.days },
+      data: { cardCode: card.code, type: normalizeCardType(card.type), days: card.days },
     };
   }
   return { ok: false, error: '不支持的领取方式' };

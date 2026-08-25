@@ -51,14 +51,14 @@ function registerAdminUserManageRoutes({
       }
       if (batchCount > 1) {
         const cards = userStore.createCardsBatch(batchCount, {
-          type: type || "standard",
+          type: type || "time",
           days: Number(days),
           description: description || "",
         });
         return res.status(201).json({ ok: true, data: { count: cards.length, cards } });
       }
       const result = userStore.createCard({
-        type: type || "standard",
+        type: type || "time",
         days: Number(days),
         description: description || "",
       });

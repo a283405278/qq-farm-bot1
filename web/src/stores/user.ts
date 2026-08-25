@@ -24,6 +24,8 @@ export interface LoginResult {
   ok: boolean
   error?: string
   code?: string
+  errorType?: 'rate_limit' | 'locked' | 'invalid_credentials'
+  remainingMs?: number
   lockout?: {
     locked?: boolean
     remainingAttempts?: number
@@ -31,11 +33,16 @@ export interface LoginResult {
   }
   data?: {
     token: string
+    role?: string
+    card?: UserCard | null
+    accountLimit?: number
+    mustChangePassword?: boolean
     user: {
       username: string
       role: string
       card: UserCard | null
       accountLimit: number
+      mustChangePassword?: boolean
     }
   }
 }
@@ -105,6 +112,7 @@ export const useUserStore = defineStore('user', () => {
           role: u.role,
           card: u.card,
           accountLimit: u.accountLimit ?? 2,
+          mustChangePassword: res.data.data.mustChangePassword ?? u.mustChangePassword,
         }
       }
       return res.data
@@ -116,6 +124,8 @@ export const useUserStore = defineStore('user', () => {
           ok: false,
           error: data.error,
           code: data.code,
+          errorType: data.errorType,
+          remainingMs: data.remainingMs,
           lockout: data.lockout,
         }
       }
@@ -149,6 +159,7 @@ export const useUserStore = defineStore('user', () => {
           card: d.card,
           accountLimit: d.accountLimit ?? 2,
           avatar: d.avatar,
+          mustChangePassword: d.mustChangePassword,
         }
       }
       return res.data
@@ -163,12 +174,16 @@ export const useUserStore = defineStore('user', () => {
     if (res.data.ok && userInfo.value) {
       if (res.data.data.card)
         userInfo.value.card = res.data.data.card
+      if (typeof res.data.data.accountLimit === 'number')
+        userInfo.value.accountLimit = res.data.data.accountLimit
     }
     return res.data
   }
 
   async function changePassword(oldPassword: string, newPassword: string) {
     const res = await api.post('/api/user/change-password', { oldPassword, newPassword })
+    if (res.data.ok && userInfo.value)
+      userInfo.value.mustChangePassword = false
     return res.data
   }
 
