@@ -825,6 +825,94 @@ function deleteUser(username) {
   return { ok: true };
 }
 
+/* --- 用户统计与清理 --- */
+
+function getExpiredUserPredicate(nowMs) {
+  return (u) => {
+    if (!u || u.role !== 'user') return false;
+    const card = u.cardCode ? findCardByCode(u.cardCode) : null;
+    if (!card || card.enabled === false) return false;
+    const expiresMs = safeDateMs(card.expiresAt);
+    if (expiresMs === 0) return false;
+    return expiresMs < nowMs;
+  };
+}
+
+function getUserStats() {
+  const users = loadUsers();
+  const nowMs = Date.now();
+  const stats = { total: users.length, valid: 0, expired: 0, banned: 0, noCard: 0 };
+  const expiredUsers = [];
+  for (const u of users) {
+    if (!u || u.role !== 'user') continue;
+    const card = u.cardCode ? findCardByCode(u.cardCode) : null;
+    if (!card) {
+      stats.noCard += 1;
+      stats.banned += 1;
+      continue;
+    }
+    if (card.enabled === false) {
+      stats.banned += 1;
+      continue;
+    }
+    const expiresMs = safeDateMs(card.expiresAt);
+    if (expiresMs > 0 && expiresMs < nowMs) {
+      stats.expired += 1;
+      expiredUsers.push({
+        username: u.username,
+        expiresAt: card.expiresAt,
+        createdAt: u.createdAt || '',
+      });
+    }
+    else {
+      stats.valid += 1;
+    }
+  }
+  return { ...stats, expiredUsers };
+}
+
+function cleanupExpiredUsers({ excludeUsernames, dryRun } = {}) {
+  const users = loadUsers();
+  const nowMs = Date.now();
+  const exclude = new Set(
+    (Array.isArray(excludeUsernames) ? excludeUsernames : [])
+      .map((n) => String(n || '').trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const isExpired = getExpiredUserPredicate(nowMs);
+  const targets = users.filter((u) => !exclude.has(String(u.username || '').trim().toLowerCase()) && isExpired(u));
+
+  if (dryRun === true) {
+    return {
+      ok: true,
+      dryRun: true,
+      count: targets.length,
+      usernames: targets.map((u) => u.username),
+    };
+  }
+
+  if (targets.length === 0) {
+    return { ok: true, count: 0, usernames: [] };
+  }
+
+  const targetNames = new Set(targets.map((u) => String(u.username || '').trim().toLowerCase()));
+  const nextUsers = users.filter((u) => !targetNames.has(String(u.username || '').trim().toLowerCase()));
+  saveUsers(nextUsers);
+
+  const targetCards = new Set(targets.map((u) => u.cardCode).filter(Boolean));
+  if (targetCards.size > 0) {
+    const cards = loadCards();
+    const nextCards = cards.filter((c) => !(c && targetCards.has(String(c.code || '').trim())));
+    saveCards(nextCards);
+  }
+
+  return {
+    ok: true,
+    count: targets.length,
+    usernames: targets.map((u) => u.username),
+  };
+}
+
 function addUser({ username, password, role, accountLimit, note }) {
   const normalizedUsername = String(username || '').trim();
   if (!normalizedUsername) return { ok: false, error: '用户名不能为空' };
@@ -994,6 +1082,8 @@ module.exports = {
   editUser,
   changePassword,
   deleteUser,
+  getUserStats,
+  cleanupExpiredUsers,
   addUser,
   addUsers,
   updateUser,

@@ -193,6 +193,16 @@ export const useUserStore = defineStore('user', () => {
     return res.data
   }
 
+  async function getUserStats() {
+    const res = await api.get('/api/admin/users/stats')
+    return res.data
+  }
+
+  async function cleanupExpiredUsers(dryRun = false) {
+    const res = await api.post('/api/admin/users/cleanup-expired', { dryRun })
+    return res.data
+  }
+
   async function getLoginLogs() {
     const res = await api.get('/api/admin/login-logs')
     return res.data
@@ -267,6 +277,8 @@ export const useUserStore = defineStore('user', () => {
     renew,
     changePassword,
     getAllUsers,
+    getUserStats,
+    cleanupExpiredUsers,
     getLoginLogs,
     clearLoginLogs,
     editUser,

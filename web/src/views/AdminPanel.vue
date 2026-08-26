@@ -458,6 +458,62 @@ const editForm = ref<EditForm>({
 })
 const editLoading = ref(false)
 
+// ========== 用户统计 ==========
+interface UserStats {
+  total: number
+  valid: number
+  expired: number
+  banned: number
+  noCard: number
+}
+
+const userStats = ref<UserStats>({ total: 0, valid: 0, expired: 0, banned: 0, noCard: 0 })
+const statsLoading = ref(false)
+const showCleanupExpiredConfirm = ref(false)
+const cleanupLoading = ref(false)
+
+async function fetchUserStats() {
+  statsLoading.value = true
+  try {
+    const result = await userStore.getUserStats()
+    if (result.ok) {
+      userStats.value = result.data
+    }
+    else {
+      toast.error(result.error || '获取用户统计失败')
+    }
+  }
+  catch (e: any) {
+    toast.error(e.message || '获取用户统计失败')
+  }
+  finally {
+    statsLoading.value = false
+  }
+}
+
+async function confirmCleanupExpired() {
+  cleanupLoading.value = true
+  try {
+    const result = await userStore.cleanupExpiredUsers()
+    if (result.ok) {
+      const count = result.data?.count ?? 0
+      toast.success(count > 0 ? `已清理 ${count} 个过期用户` : '没有需要清理的过期用户')
+      showCleanupExpiredConfirm.value = false
+      await fetchUsers()
+      await fetchUserStats()
+    }
+    else {
+      toast.error(result.error || '清理失败')
+    }
+  }
+  catch (e: any) {
+    toast.error(e.message || '清理失败')
+  }
+  finally {
+    cleanupLoading.value = false
+  }
+}
+
 const currentUsername = computed(() => userStore.username)
 
 async function fetchUsers() {
@@ -718,6 +774,7 @@ onMounted(() => {
   fetchUsers()
   fetchLoginLogs()
   fetchCardClaimStatus()
+  fetchUserStats()
 })
 </script>
 
@@ -788,7 +845,7 @@ onMounted(() => {
             </div>
           </div>
 
-          <div class="card flex flex-col gap-3 border border-gray-200 rounded-2xl bg-white p-4 shadow-md dark:border-gray-700 dark:bg-gray-800 md:flex-row md:items-end md:justify-between">
+          <div class="card flex flex-col gap-3 border border-gray-200 rounded-2xl bg-white p-4 shadow-md md:flex-row md:items-end md:justify-between dark:border-gray-700 dark:bg-gray-800">
             <div class="flex-1">
               <div class="text-sm text-gray-900 font-medium dark:text-white">
                 免费领取发放卡密
@@ -807,10 +864,10 @@ onMounted(() => {
               </select>
               <div class="mt-2 text-xs text-gray-500 dark:text-gray-400">
                 <template v-if="cardClaimEnabled && activeClaimCard">
-                  当前固定发放：<span class="font-medium text-amber-600 dark:text-amber-300">{{ activeClaimCard.code }}</span>
+                  当前固定发放：<span class="text-amber-600 font-medium dark:text-amber-300">{{ activeClaimCard.code }}</span>
                 </template>
                 <template v-else-if="cardClaimEnabled">
-                  当前发放策略：<span class="font-medium text-emerald-600 dark:text-emerald-300">自动选择首张可用时间卡</span>
+                  当前发放策略：<span class="text-emerald-600 font-medium dark:text-emerald-300">自动选择首张可用时间卡</span>
                 </template>
                 <template v-else>
                   当前发放策略：功能未开启
@@ -1123,9 +1180,70 @@ onMounted(() => {
             <h3 class="text-lg text-gray-900 font-bold dark:text-gray-100">
               用户管理
             </h3>
-            <BaseButton variant="primary" size="sm" @click="fetchUsers">
-              刷新
-            </BaseButton>
+            <div class="flex items-center gap-2">
+              <BaseButton
+                v-if="userStats.expired > 0"
+                variant="danger"
+                size="sm"
+                :disabled="statsLoading"
+                @click="showCleanupExpiredConfirm = true"
+              >
+                清理过期用户
+              </BaseButton>
+              <BaseButton variant="primary" size="sm" :loading="statsLoading" @click="fetchUserStats">
+                刷新统计
+              </BaseButton>
+              <BaseButton variant="secondary" size="sm" @click="fetchUsers">
+                刷新
+              </BaseButton>
+            </div>
+          </div>
+
+          <!-- 用户统计 -->
+          <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div class="card border border-gray-200 rounded-2xl bg-white p-4 shadow-md dark:border-gray-700 dark:bg-gray-800">
+              <div class="text-xs text-gray-500 dark:text-gray-400">
+                总用户
+              </div>
+              <div class="mt-1 text-2xl text-gray-900 font-bold dark:text-white">
+                {{ userStats.total }}
+              </div>
+            </div>
+            <div class="card border border-gray-200 rounded-2xl bg-white p-4 shadow-md dark:border-gray-700 dark:bg-gray-800">
+              <div class="text-xs text-gray-500 dark:text-gray-400">
+                有效用户
+              </div>
+              <div class="mt-1 text-2xl text-green-600 font-bold dark:text-green-400">
+                {{ userStats.valid }}
+              </div>
+            </div>
+            <div class="card border border-gray-200 rounded-2xl bg-white p-4 shadow-md dark:border-gray-700 dark:bg-gray-800">
+              <div class="text-xs text-gray-500 dark:text-gray-400">
+                过期用户
+              </div>
+              <div
+                class="mt-1 text-2xl font-bold"
+                :class="userStats.expired > 0 ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-900 dark:text-white'"
+              >
+                {{ userStats.expired }}
+              </div>
+            </div>
+            <div class="card border border-gray-200 rounded-2xl bg-white p-4 shadow-md dark:border-gray-700 dark:bg-gray-800">
+              <div class="text-xs text-gray-500 dark:text-gray-400">
+                封禁 / 无卡
+              </div>
+              <div
+                class="mt-1 text-2xl font-bold"
+                :class="userStats.banned > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'"
+              >
+                {{ userStats.banned }}
+              </div>
+            </div>
+          </div>
+
+          <div v-if="userStats.expired > 0" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-yellow-700 dark:text-yellow-300" style="background-color: rgba(250, 204, 21, 0.12);">
+            <div class="i-carbon-warning-alt" />
+            当前有 <span class="font-semibold">{{ userStats.expired }}</span> 个已过期用户，点击右上角「清理过期用户」可批量删除（连同其卡密）。
           </div>
 
           <div v-if="usersLoading" class="py-8 text-center text-gray-500">
@@ -1315,6 +1433,17 @@ onMounted(() => {
               </div>
             </div>
           </div>
+          <ConfirmModal
+            :show="showCleanupExpiredConfirm"
+            type="danger"
+            title="清理过期用户"
+            :message="`确定要删除 ${userStats.expired} 个已过期的用户吗？此操作会连同其卡密一起删除，且不可恢复！`"
+            confirm-text="确认清理"
+            :loading="cleanupLoading"
+            @confirm="confirmCleanupExpired"
+            @cancel="showCleanupExpiredConfirm = false"
+            @close="showCleanupExpiredConfirm = false"
+          />
         </div>
 
         <!-- 登录日志 -->

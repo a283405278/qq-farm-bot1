@@ -148,6 +148,35 @@ function registerAdminUserManageRoutes({
     }
   });
 
+  app.get("/api/admin/users/stats", requireAdminToken, requireAdminRole, (req, res) => {
+    try {
+      const stats = userStore.getUserStats();
+      return res.json({ ok: true, data: stats });
+    } catch (error) {
+      return res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  app.post(
+    "/api/admin/users/cleanup-expired",
+    requireAdminToken,
+    requireAdminRole,
+    (req, res) => {
+      try {
+        const currentUser = requireAdmin(req, res);
+        if (!currentUser) return;
+        const { dryRun } = req.body || {};
+        const result = userStore.cleanupExpiredUsers({
+          excludeUsernames: [currentUser.username],
+          dryRun: dryRun === true,
+        });
+        return res.json({ ok: true, data: result });
+      } catch (error) {
+        return res.status(500).json({ ok: false, error: error.message });
+      }
+    },
+  );
+
   function getTargetUsername(req) {
     return String((req.params && req.params.username) || "").trim();
   }
