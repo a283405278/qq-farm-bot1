@@ -338,11 +338,18 @@ function getDaysLabel(days: number) {
         :active-class="item.path === '/' ? '' : 'router-link-active'"
         :exact-active-class="item.path === '/' ? 'router-link-active' : 'router-link-exact-active'"
         class="nav-item group relative flex items-center gap-3 rounded-xl px-2 py-1.5 transition-colors duration-200"
+        :class="item.path === '/admin-announcement' ? 'announcement-nav-item' : ''"
       >
         <span class="nav-icon h-9 w-9 flex flex-none items-center justify-center rounded-lg text-[22px] transition-colors duration-200">
           <div :class="[item.icon]" />
         </span>
         <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ item.label }}</span>
+        <span
+          v-if="item.path === '/admin-announcement'"
+          class="rounded-full bg-amber-500 px-2 py-0.5 text-[10px] text-white font-semibold shadow-sm"
+        >
+          公告
+        </span>
         <span
           v-if="item.path === '/shop' && hasActiveMysteryOffer"
           class="h-2 w-2 shrink-0 rounded-full bg-red-500 shadow-[0_0_0_3px_rgba(239,68,68,0.15)]"
@@ -547,6 +554,24 @@ function getDaysLabel(days: number) {
 .nav-item:hover {
   background: var(--surface-2);
   opacity: 1;
+}
+
+/* 公告管理：醒目高亮 */
+.announcement-nav-item {
+  background: linear-gradient(90deg, color-mix(in srgb, #f59e0b 16%, transparent), transparent 85%);
+  border: 1px solid color-mix(in srgb, #f59e0b 34%, transparent);
+  opacity: 1;
+}
+.announcement-nav-item:hover {
+  background: linear-gradient(90deg, color-mix(in srgb, #f59e0b 26%, transparent), transparent 85%);
+  border-color: color-mix(in srgb, #f59e0b 52%, transparent);
+}
+.announcement-nav-item.router-link-active,
+.announcement-nav-item.router-link-exact-active {
+  border-color: color-mix(in srgb, #f59e0b 70%, transparent) !important;
+}
+.announcement-nav-item .nav-icon {
+  color: #d97706;
 }
 
 /* 图标容器 */

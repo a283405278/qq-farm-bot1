@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import api from '@/api'
+import AnnouncementModal from '@/components/AnnouncementModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import { useAppStore } from '@/stores/app'
@@ -485,6 +486,8 @@ onMounted(() => {
         </div>
       </Transition>
     </Teleport>
+
+    <AnnouncementModal />
   </div>
 </template>
 

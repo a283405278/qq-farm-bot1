@@ -34,6 +34,9 @@ const {
 } = require("./admin-account-runtime-routes");
 const { registerAdminAccountRoutes } = require("./admin-account-routes");
 const { registerAdminAnalyticsRoutes } = require("./admin-analytics-routes");
+const {
+  registerAdminAnnouncementRoutes,
+} = require("./admin-announcement-routes");
 const { createAdminAccountAccess } = require("./admin-account-access");
 const { registerAdminAuthRoutes } = require("./admin-auth-routes");
 const { registerAdminBagRoutes } = require("./admin-bag-routes");
@@ -82,6 +85,7 @@ const PUBLIC_API_PATHS = new Set([
   "/game-version",
   "/public/login-links",
   "/changelog",
+  "/announcement",
   "/health",
 ]);
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
@@ -554,6 +558,13 @@ function startAdminServer(dataProvider) {
     getDefaultSystemConfig,
     getRuntimeConfig,
     updateRuntimeConfig,
+  });
+  registerAdminAnnouncementRoutes({
+    app,
+    store,
+    logger: adminLogger,
+    requireAdminToken,
+    requireAdminRole,
   });
   adminLogger.info("抓包服务默认关闭，未随管理面板启动运行");
   registerAdminCaptureRoutes({

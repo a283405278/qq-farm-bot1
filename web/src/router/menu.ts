@@ -80,4 +80,12 @@ export const menuRoutes: MenuItem[] = [
     component: () => import('@/views/AdminPanel.vue'),
     adminOnly: true,
   },
+  {
+    path: 'admin-announcement',
+    name: 'admin-announcement',
+    label: '公告管理',
+    icon: 'i-carbon-megaphone',
+    component: () => import('@/views/AdminAnnouncement.vue'),
+    adminOnly: true,
+  },
 ]
