@@ -28,6 +28,34 @@ export interface FriendPost {
   isKnown: boolean
 }
 
+export interface AutoFriendCandidate {
+  gid: number
+  nick: string
+  level: number
+  source: string
+}
+
+export interface AutoFriendStatus {
+  running: boolean
+  status: 'idle' | 'running' | 'completed' | 'stopped' | 'error'
+  intervalSec: number
+  progress: number
+  index: number
+  candidateCount: number
+  total: number
+  processed: number
+  success: number
+  failed: number
+  skippedApplied: number
+  skippedFriend: number
+  skippedBlacklist: number
+  skippedSelf: number
+  lastError: string
+  startedAt: number
+  finishedAt: number
+  appliedCount: number
+}
+
 export const useFriendStore = defineStore('friend', () => {
   const friends = ref<any[]>([])
   const loading = ref(false)
@@ -51,6 +79,14 @@ export const useFriendStore = defineStore('friend', () => {
   const friendPostsAdding = ref<Record<string, boolean>>({})
   const friendPostsError = ref('')
 
+  const autoFriendStatus = ref<AutoFriendStatus | null>(null)
+  const autoFriendCandidates = ref<AutoFriendCandidate[]>([])
+  const autoFriendLoading = ref(false)
+  const autoFriendScanning = ref(false)
+  const autoFriendStarting = ref(false)
+  const autoFriendStopping = ref(false)
+  const autoFriendError = ref('')
+
   function clearFriendData() {
     friends.value = []
     friendLands.value = {}
@@ -63,6 +99,9 @@ export const useFriendStore = defineStore('friend', () => {
     friendsListCacheTtlSec.value = 60
     friendPosts.value = []
     friendPostsError.value = ''
+    autoFriendStatus.value = null
+    autoFriendCandidates.value = []
+    autoFriendError.value = ''
   }
 
   function isCurrentAccount(accountId: string) {
@@ -476,6 +515,120 @@ export const useFriendStore = defineStore('friend', () => {
     }
   }
 
+  async function fetchAutoFriendStatus(accountId: string) {
+    if (!accountId)
+      return
+    autoFriendLoading.value = true
+    try {
+      const res = await api.get('/api/auto-friend/status', {
+        headers: { 'x-account-id': accountId },
+      })
+      if (res.data.ok)
+        autoFriendStatus.value = res.data.data
+      else
+        autoFriendError.value = res.data.error || '获取自动加好友状态失败'
+    }
+    catch (e: any) {
+      autoFriendError.value = e?.response?.data?.error || e?.message || '获取自动加好友状态失败'
+    }
+    finally {
+      autoFriendLoading.value = false
+    }
+  }
+
+  async function scanAutoFriend(
+    accountId: string,
+    extraGids: number[] = [],
+  ): Promise<
+    | { ok: true, candidates: AutoFriendCandidate[], message?: string }
+    | { ok: false, message: string }
+  > {
+    if (!accountId)
+      return { ok: false, message: '参数无效' }
+    autoFriendScanning.value = true
+    autoFriendError.value = ''
+    try {
+      const res = await api.post('/api/auto-friend/scan', { gids: extraGids }, {
+        headers: { 'x-account-id': accountId },
+      })
+      if (res.data.ok) {
+        autoFriendCandidates.value = res.data.data?.candidates || []
+        autoFriendStatus.value = {
+          ...(autoFriendStatus.value || {} as AutoFriendStatus),
+          ...res.data.data?.stats,
+          candidateCount: res.data.data?.candidates?.length || 0,
+        }
+        return { ok: true, candidates: autoFriendCandidates.value }
+      }
+      return { ok: false, message: res.data.error || '扫描失败' }
+    }
+    catch (e: any) {
+      return { ok: false, message: e?.response?.data?.error || e?.message || '扫描失败' }
+    }
+    finally {
+      autoFriendScanning.value = false
+    }
+  }
+
+  async function startAutoFriendTask(accountId: string, intervalSec: number, extraGids: number[] = []) {
+    if (!accountId)
+      return { ok: false, message: '参数无效' }
+    autoFriendStarting.value = true
+    autoFriendError.value = ''
+    try {
+      const res = await api.post('/api/auto-friend/start', { intervalSec, gids: extraGids }, {
+        headers: { 'x-account-id': accountId },
+      })
+      if (res.data.ok) {
+        autoFriendStatus.value = res.data.data
+        return { ok: true }
+      }
+      return { ok: false, message: res.data.error || '启动失败' }
+    }
+    catch (e: any) {
+      return { ok: false, message: e?.response?.data?.error || e?.message || '启动失败' }
+    }
+    finally {
+      autoFriendStarting.value = false
+    }
+  }
+
+  async function stopAutoFriendTask(accountId: string) {
+    if (!accountId)
+      return { ok: false, message: '参数无效' }
+    autoFriendStopping.value = true
+    try {
+      const res = await api.post('/api/auto-friend/stop', {}, {
+        headers: { 'x-account-id': accountId },
+      })
+      if (res.data.ok) {
+        autoFriendStatus.value = res.data.data
+        return { ok: true }
+      }
+      return { ok: false, message: res.data.error || '停止失败' }
+    }
+    catch (e: any) {
+      return { ok: false, message: e?.response?.data?.error || e?.message || '停止失败' }
+    }
+    finally {
+      autoFriendStopping.value = false
+    }
+  }
+
+  async function sendFriendApplicationTo(accountId: string, gid: number) {
+    if (!accountId || !gid)
+      return { ok: false, message: '参数无效' }
+    try {
+      const res = await api.post('/api/auto-friend/send', { gid }, {
+        headers: { 'x-account-id': accountId },
+      })
+      return { ok: !!res.data.ok, message: res.data.data?.ok ? '申请已发送' : (res.data.error || '发送失败') }
+    }
+    catch (e: any) {
+      return { ok: false, message: e?.response?.data?.error || e?.message || '发送失败' }
+    }
+  }
+
   return {
     friends,
     loading,
@@ -514,5 +667,17 @@ export const useFriendStore = defineStore('friend', () => {
     publishFriendPost,
     removeMyFriendPost,
     addFriendFromPost,
+    autoFriendStatus,
+    autoFriendCandidates,
+    autoFriendLoading,
+    autoFriendScanning,
+    autoFriendStarting,
+    autoFriendStopping,
+    autoFriendError,
+    fetchAutoFriendStatus,
+    scanAutoFriend,
+    startAutoFriendTask,
+    stopAutoFriendTask,
+    sendFriendApplicationTo,
   }
 })

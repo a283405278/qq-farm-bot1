@@ -41,6 +41,13 @@ const {
     fetchFriendsDogInfo,
     delFriend
 } = require('../services/friend');
+const {
+    getAutoFriendStatus,
+    scanAutoFriendCandidates,
+    sendFriendApplication,
+    startAutoFriendTask,
+    stopAutoFriendTask
+} = require('../services/auto-friend');
 const { getInteractRecords } = require('../services/interact');
 const { processInviteCodes } = require('../services/invite');
 const {
@@ -1324,6 +1331,21 @@ async function handleApiCall(msg) {
                 break;
             case 'delFriend':
                 result = await delFriend(args[0]);
+                break;
+            case 'getAutoFriendStatus':
+                result = getAutoFriendStatus();
+                break;
+            case 'scanAutoFriendCandidates':
+                result = await scanAutoFriendCandidates(args[0]);
+                break;
+            case 'startAutoFriendTask':
+                result = await startAutoFriendTask(args[0]);
+                break;
+            case 'stopAutoFriendTask':
+                result = stopAutoFriendTask();
+                break;
+            case 'sendFriendApplication':
+                result = await sendFriendApplication(args[0]);
                 break;
             case 'getSeeds':
                 result = await getAvailableSeeds();

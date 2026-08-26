@@ -172,6 +172,13 @@ function createDataProvider(deps) {
         fetchFriendsDogInfo: (ref) => callWorkerApi(resolveAccountId(ref), 'fetchFriendsDogInfo', DOG_INFO_TIMEOUT),
         delFriend: (ref, gid) => callWorkerApi(resolveAccountId(ref), 'delFriend', gid),
 
+        // ========== 自动加好友 ==========
+        getAutoFriendStatus: (ref) => callWorkerApi(resolveAccountId(ref), 'getAutoFriendStatus'),
+        scanAutoFriendCandidates: (ref, opts) => callWorkerApi(resolveAccountId(ref), 'scanAutoFriendCandidates', opts),
+        startAutoFriendTask: (ref, opts) => callWorkerApi(resolveAccountId(ref), 'startAutoFriendTask', opts),
+        stopAutoFriendTask: (ref) => callWorkerApi(resolveAccountId(ref), 'stopAutoFriendTask'),
+        sendFriendApplication: (ref, gid) => callWorkerApi(resolveAccountId(ref), 'sendFriendApplication', gid),
+
         // ========== 仓库 ==========
         useItem: (ref, itemId, count, uid) => callWorkerApi(resolveAccountId(ref), 'useItem', itemId, count, uid),
         sellItems: (ref, items) => callWorkerApi(resolveAccountId(ref), 'sellItems', items),

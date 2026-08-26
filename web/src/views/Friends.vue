@@ -5,6 +5,7 @@ import { storeToRefs } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import api from '@/api'
 import ConfirmModal from '@/components/ConfirmModal.vue'
+import AutoFriendBoard from '@/components/friends/AutoFriendBoard.vue'
 import FriendsAddBoard from '@/components/friends/FriendsAddBoard.vue'
 import FriendsFriendList from '@/components/friends/FriendsFriendList.vue'
 import FriendsPageHeader from '@/components/friends/FriendsPageHeader.vue'
@@ -45,6 +46,7 @@ const { status, loading: statusLoading, realtimeConnected, currentStatusReady } 
 const TABS = [
   { key: 'friends', label: '好友列表', icon: 'i-carbon-user-multiple' },
   { key: 'posts', label: '互加好友', icon: 'i-carbon-add-alt' },
+  { key: 'auto-friend', label: '自动加好友', icon: 'i-carbon-user-profile-add' },
   { key: 'blacklist', label: '好友黑名单', icon: 'i-carbon-list-blocked' },
   { key: 'visitors', label: '最近访客', icon: 'i-carbon-user-activity' },
 ] as const
@@ -789,6 +791,12 @@ async function handleBatchAddKnownFriendGids() {
         <FriendsAddBoard
           :account-id="currentAccountId"
           @added="handlePostAdded"
+        />
+      </div>
+
+      <div v-else-if="activeTab === 'auto-friend'">
+        <AutoFriendBoard
+          :account-id="currentAccountId"
         />
       </div>
 
