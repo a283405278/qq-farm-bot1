@@ -22,9 +22,18 @@ const RAIN_POEM_PRANK_SOCIAL_TYPES = new Map([
   [RAIN_POEM_CLOUD_BOTTLE_ITEM_ID, 4],
 ]);
 const RAIN_POEM_PRANK_ACTIVE_LIMIT_CODE = 1033011;
+const RAIN_POEM_PRANK_LAND_OCCUPIED_CODE = 1001084;
+const RAIN_POEM_PRANK_SOCIAL_ITEM_IDS = new Map([
+  [RAIN_POEM_FROG_BOTTLE_ITEM_ID, 301102],
+  [RAIN_POEM_CLOUD_BOTTLE_ITEM_ID, 301103],
+]);
 
 function isRainPoemPrankAlreadyActiveError(err) {
   return String(err?.message || '').includes(`code=${RAIN_POEM_PRANK_ACTIVE_LIMIT_CODE}`);
+}
+
+function isRainPoemPrankLandOccupiedError(err) {
+  return String(err?.message || '').includes(`code=${RAIN_POEM_PRANK_LAND_OCCUPIED_CODE}`);
 }
 
 function getPrankBottleInventory(items) {
@@ -44,6 +53,7 @@ function getPrankBottleInventory(items) {
 
 function getPrankCandidateLandIds(lands, itemId) {
   const socialType = RAIN_POEM_PRANK_SOCIAL_TYPES.get(toNum(itemId));
+  const socialItemId = RAIN_POEM_PRANK_SOCIAL_ITEM_IDS.get(toNum(itemId));
   if (!socialType) return [];
   const result = [];
   for (const land of Array.isArray(lands) ? lands : []) {
@@ -53,7 +63,9 @@ function getPrankCandidateLandIds(lands, itemId) {
     const phase = getCurrentPhase(plant.phases, false, '', plant.id)?.phase;
     if (!phase || phase === PlantPhase.MATURE || phase === PlantPhase.DEAD) continue;
     const alreadyApplied = (plant.social_items || []).some(item => (
-      toNum(item?.item_id) === toNum(itemId) || toNum(item?.type) === socialType
+      toNum(item?.item_id) === toNum(itemId)
+      || toNum(item?.item_id) === toNum(socialItemId)
+      || toNum(item?.type) === socialType
     ));
     if (!alreadyApplied) result.push(landId);
   }
@@ -120,30 +132,42 @@ async function runRainPoemPrankPlacement() {
       entered = true;
       for (let index = 0; index < queue.length;) {
         const { itemId, itemUid } = queue[index];
-        const landId = getPrankCandidateLandIds(visit?.lands, itemId)[0];
-        if (!landId) {
+        const candidateLandIds = getPrankCandidateLandIds(visit?.lands, itemId);
+        if (candidateLandIds.length === 0) {
           index++;
           continue;
         }
-        try {
-          await putRainPoemPrankBottle(friend.gid, landId, itemId, itemUid);
-          queue.splice(index, 1);
-          if (itemId === RAIN_POEM_FROG_BOTTLE_ITEM_ID) placed.frog++;
-          else placed.cloud++;
-          consecutiveFailures = 0;
-          break;
-        } catch (err) {
-          if (isRainPoemPrankAlreadyActiveError(err)) {
-            activeFriends++;
+        let placed = false;
+        let friendExhausted = false;
+        for (const landId of candidateLandIds) {
+          try {
+            await putRainPoemPrankBottle(friend.gid, landId, itemId, itemUid);
+            queue.splice(index, 1);
+            if (itemId === RAIN_POEM_FROG_BOTTLE_ITEM_ID) placed.frog++;
+            else placed.cloud++;
+            consecutiveFailures = 0;
+            placed = true;
+            break;
+          } catch (err) {
+            if (isRainPoemPrankLandOccupiedError(err)) {
+              continue;
+            }
+            if (isRainPoemPrankAlreadyActiveError(err)) {
+              activeFriends++;
+              friendExhausted = true;
+              break;
+            }
+            consecutiveFailures++;
+            logWarn('活动', `给 ${friend.name || `GID:${friend.gid}`} 使用使坏瓶失败: ${err.message}`, {
+              module: 'activity', event: '雨落成诗自动使坏', result: 'error',
+              friendGid: friend.gid, landId, itemId,
+            });
+            friendExhausted = true;
             break;
           }
-          consecutiveFailures++;
-          logWarn('活动', `给 ${friend.name || `GID:${friend.gid}`} 使用使坏瓶失败: ${err.message}`, {
-            module: 'activity', event: '雨落成诗自动使坏', result: 'error',
-            friendGid: friend.gid, landId, itemId,
-          });
-          break;
         }
+        if (placed || friendExhausted) break;
+        index++;
       }
     } catch (err) {
       handleFriendEnterError(friend.gid, friend.name || `GID:${friend.gid}`, err);
@@ -168,10 +192,13 @@ module.exports = {
   RAIN_POEM_FROG_BOTTLE_ITEM_ID,
   RAIN_POEM_CLOUD_BOTTLE_ITEM_ID,
   RAIN_POEM_PRANK_SOCIAL_TYPES,
+  RAIN_POEM_PRANK_SOCIAL_ITEM_IDS,
   RAIN_POEM_PRANK_ACTIVE_LIMIT_CODE,
+  RAIN_POEM_PRANK_LAND_OCCUPIED_CODE,
   getPrankBottleInventory,
   getPrankCandidateLandIds,
   isRainPoemPrankAlreadyActiveError,
+  isRainPoemPrankLandOccupiedError,
   encodeRainPoemPrankRequest,
   putRainPoemPrankBottle,
   runRainPoemPrankPlacement,

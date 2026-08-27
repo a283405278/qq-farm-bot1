@@ -5,7 +5,9 @@ const { loadProto } = require('../src/utils/proto');
 const {
   encodeRainPoemPrankRequest,
   getPrankBottleInventory,
+  getPrankCandidateLandIds,
   isRainPoemPrankAlreadyActiveError,
+  isRainPoemPrankLandOccupiedError,
 } = require('../src/services/rain-poem-prank-service');
 
 test.before(async () => {
@@ -36,4 +38,24 @@ test('an existing prank event limit is recognized as an active effect', () => {
     'gamepb.itempb.ItemService.Use 错误: code=1033011 该使坏事件同时存在数量已达上限'
   )), true);
   assert.equal(isRainPoemPrankAlreadyActiveError(new Error('code=1000021 配置不存在')), false);
+});
+
+test('an occupied land is recognized as already carrying a prank effect', () => {
+  assert.equal(isRainPoemPrankLandOccupiedError(new Error(
+    'gamepb.itempb.ItemService.Use 错误: code=1001084 作物上已有使坏事件，不可使用'
+  )), true);
+  assert.equal(isRainPoemPrankLandOccupiedError(new Error('code=1033011 数量已达上限')), false);
+});
+
+test('lands already carrying the social item id or type are excluded before placing', () => {
+  const lands = [
+    { id: 1, plant: { id: 10, phases: [{ phase: 2, remaining: 100 }], social_items: [{ item_id: 5005, type: 3 }] } },
+    { id: 2, plant: { id: 20, phases: [{ phase: 2, remaining: 100 }], social_items: [{ item_id: 301102, type: 3 }] } },
+    { id: 3, plant: { id: 30, phases: [{ phase: 2, remaining: 100 }], social_items: [] } },
+    { id: 4, plant: { id: 40, phases: [{ phase: 2, remaining: 100 }], social_items: [{ item_id: 9999, type: 7 }] } },
+  ];
+
+  const candidates = getPrankCandidateLandIds(lands, 5005);
+
+  assert.deepEqual(candidates, [3, 4]);
 });
