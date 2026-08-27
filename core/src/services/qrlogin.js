@@ -6,23 +6,9 @@
  * - QQ 小程序登录码生成与状态轮询
  */
 const { Buffer } = require('node:buffer');
-const fs = require('node:fs');
-const path = require('node:path');
 const axios = require('axios');
 const QRCode = require('qrcode');
 const { CookieUtils, HashUtils } = require('../utils/qrutils');
-
-const QRLOGIN_DIAG_FILE = path.join(__dirname, '../../data/qq-qrlogin-diag.log');
-
-function diagLog(msg) {
-  const line = `[${new Date().toISOString()}] ${msg}\n`;
-  try {
-    fs.appendFileSync(QRLOGIN_DIAG_FILE, line);
-  } catch (e) {
-    console.error('diagLog error:', e.message);
-  }
-  console.info(msg);
-}
 
 // 浏览器 UA
 const ChromeUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -167,29 +153,14 @@ class MiniProgramLoginSession {
   static QUA = 'V1_HT5_QDT_0.70.2209190_x64_0_DEV_D';
   static Presets = { farm: QQ_FARM_MINI_PROGRAM_PRESET };
 
-  static sessionCookies = '';
-
   static getHeaders() {
-    const headers = {
+    return {
       qua: MiniProgramLoginSession.QUA,
       host: 'q.qq.com',
       accept: 'application/json',
       'content-type': 'application/json',
       'user-agent': ChromeUA,
     };
-    if (MiniProgramLoginSession.sessionCookies) {
-      headers.cookie = MiniProgramLoginSession.sessionCookies;
-    }
-    return headers;
-  }
-
-  static captureCookies(response) {
-    const setCookies = response && response.headers && response.headers['set-cookie'];
-    if (!Array.isArray(setCookies) || setCookies.length === 0) return;
-    const cookies = setCookies.map((c) => c.split(';')[0].trim()).filter(Boolean);
-    if (cookies.length > 0) {
-      MiniProgramLoginSession.sessionCookies = cookies.join('; ');
-    }
   }
 
   /**
@@ -201,7 +172,6 @@ class MiniProgramLoginSession {
       const response = await axios.get('https://q.qq.com/ide/devtoolAuth/GetLoginCode', {
         headers: this.getHeaders(),
       });
-      this.captureCookies(response);
       const { code, data } = response.data;
 
       if (+code !== 0) throw new Error('获取登录码失败');
@@ -232,17 +202,14 @@ class MiniProgramLoginSession {
         `https://q.qq.com/ide/devtoolAuth/syncScanSateGetTicket?code=${code}`,
         { headers: this.getHeaders() }
       );
-      this.captureCookies(response);
 
       if (response.status !== 200) return { status: 'Error' };
 
-      const { code: apiCode, data, message } = response.data;
+      const { code: apiCode, data } = response.data;
 
       if (+apiCode === 0) {
         const result = { status: 'Wait' };
         if (+data.ok !== 1) return result;
-        console.info('MP Scan OK:', JSON.stringify({ ticketLen: (data.ticket || '').length, uin: data.uin }));
-        diagLog(`queryStatus OK ticketLen=${(data.ticket || '').length} uin=${data.uin} cookie=${MiniProgramLoginSession.sessionCookies}`);
         return {
           status: 'OK',
           ticket: data.ticket,
@@ -253,7 +220,7 @@ class MiniProgramLoginSession {
 
       if (+apiCode === -10001) return { status: 'Used' };
 
-      return { status: 'Error', msg: `Code: ${apiCode}${message ? `, ${message}` : ''}` };
+      return { status: 'Error', msg: `Code: ${apiCode}` };
     } catch (err) {
       console.error('MP Query Status Error:', err.message);
       throw err;
@@ -264,9 +231,6 @@ class MiniProgramLoginSession {
    * 用 ticket 换取授权码
    * @param {string} ticket
    * @param {string} appid - 默认 '1112386029'
-   * @returns {{ ok: boolean, code: string, message: string }}
-   *   成功时 ok=true 且 code 为非负的授权码；
-   *   失败时 ok=false，message 携带服务端错误信息。
    */
   static async getAuthCode(ticket, appid = '1112386029') {
     try {
@@ -275,23 +239,12 @@ class MiniProgramLoginSession {
         { appid, ticket },
         { headers: this.getHeaders() }
       );
-      this.captureCookies(response);
-      if (response.status !== 200) {
-        return { ok: false, code: '', message: `HTTP ${response.status}` };
-      }
-      const { code, message } = response.data || {};
-      const numeric = Number(code);
-      const valid = typeof code === 'string' ? /^\d+$/.test(code) : Number.isInteger(numeric);
-      if (!valid || numeric < 0) {
-        console.info('MP GetAuthCode fail:', JSON.stringify(response.data));
-        diagLog(`getAuthCode fail code=${code} message=${message} ticketLen=${(ticket || '').length} cookie=${MiniProgramLoginSession.sessionCookies}`);
-        return { ok: false, code: '', message: message || `换取登录码失败: ${code}` };
-      }
-      diagLog(`getAuthCode ok codeLen=${String(code).length} cookie=${MiniProgramLoginSession.sessionCookies}`);
-      return { ok: true, code: String(code), message: message || '' };
+      if (response.status !== 200) return '';
+      const { code } = response.data;
+      return code || '';
     } catch (err) {
       console.error('MP Get Auth Code Error:', err.message);
-      return { ok: false, code: '', message: err.message || '换取登录码失败' };
+      return '';
     }
   }
 }

@@ -20,19 +20,10 @@ function registerAdminQrLoginRoutes({ app }) {
       const status = await MiniProgramLoginSession.queryStatus(code);
       if (status.status === "OK") {
         const appId = "1112386029";
-        const auth = await MiniProgramLoginSession.getAuthCode(
+        const authCode = await MiniProgramLoginSession.getAuthCode(
           status.ticket,
           appId,
         );
-        if (!auth.ok || !auth.code) {
-          return res.json({
-            ok: true,
-            data: {
-              status: "Error",
-              error: auth.message || "换取登录码失败",
-            },
-          });
-        }
         const avatar = status.uin
           ? `https://q1.qlogo.cn/g?b=qq&nk=${  status.uin  }&s=640`
           : "";
@@ -40,7 +31,7 @@ function registerAdminQrLoginRoutes({ app }) {
           ok: true,
           data: {
             status: "OK",
-            code: auth.code,
+            code: authCode,
             uin: status.uin || "",
             avatar,
             nickname: status.nickname || "",
