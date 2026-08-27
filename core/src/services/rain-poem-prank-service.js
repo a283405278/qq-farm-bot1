@@ -60,7 +60,7 @@ function getPrankCandidateLandIds(lands, itemId) {
   return result;
 }
 
-function encodeRainPoemPrankRequest(gid, itemId, itemUid) {
+function encodeRainPoemPrankRequest(gid, landId, itemId, itemUid) {
   if (!RAIN_POEM_PRANK_SOCIAL_TYPES.has(toNum(itemId))) throw new Error(`不支持的使坏瓶: ${itemId}`);
   if (toNum(itemUid) <= 0) throw new Error(`使坏瓶缺少背包 UID: ${itemId}`);
   const writer = protobuf.Writer.create();
@@ -71,13 +71,13 @@ function encodeRainPoemPrankRequest(gid, itemId, itemUid) {
     .ldelim();
   writer.uint32(18).fork()
     .uint32(8).int64(toNum(gid))
-    .uint32(24).int64(0)
+    .uint32(18).fork().int64(toNum(landId)).ldelim()
     .ldelim();
   return writer.finish();
 }
 
-async function putRainPoemPrankBottle(gid, itemId, itemUid) {
-  const payload = encodeRainPoemPrankRequest(gid, itemId, itemUid);
+async function putRainPoemPrankBottle(gid, landId, itemId, itemUid) {
+  const payload = encodeRainPoemPrankRequest(gid, landId, itemId, itemUid);
   const { body } = await sendMsgAsync('gamepb.itempb.ItemService', 'Use', payload);
   return types.UseReply.decode(body);
 }
@@ -126,7 +126,7 @@ async function runRainPoemPrankPlacement() {
           continue;
         }
         try {
-          await putRainPoemPrankBottle(friend.gid, itemId, itemUid);
+          await putRainPoemPrankBottle(friend.gid, landId, itemId, itemUid);
           queue.splice(index, 1);
           if (itemId === RAIN_POEM_FROG_BOTTLE_ITEM_ID) placed.frog++;
           else placed.cloud++;
