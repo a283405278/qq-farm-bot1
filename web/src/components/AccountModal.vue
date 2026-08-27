@@ -64,6 +64,8 @@ const captureFlow = ref<CaptureFlowState | null>(null)
 const qqChecking = ref(false)
 const qqAccountName = ref('')
 const QQ_AUTO_REFRESH_MS = 110_000
+const showQqManual = ref(false)
+const qqManualCode = ref('')
 
 const form = reactive({
   name: '',
@@ -437,6 +439,39 @@ async function submitManual() {
   await addAccount(payload)
 }
 
+async function submitQqManual() {
+  errorMessage.value = ''
+  const rawCode = qqManualCode.value.trim()
+  if (!rawCode) {
+    errorMessage.value = '请输入登录 Code 或 WebSocket URL'
+    return
+  }
+
+  const parsedInput = parseManualLoginInput(rawCode)
+  let code = parsedInput.code || rawCode
+  if (!parsedInput.gatewayUrl) {
+    const match = code.match(CODE_QUERY_RE)
+    if (match && match[1])
+      code = decodeURIComponent(match[1])
+  }
+  if (!code) {
+    errorMessage.value = '未能从输入中解析出 Code，请粘贴 F12 抓取的 WebSocket URL 或 code 参数'
+    return
+  }
+
+  stopQqCheck()
+  const name = qqAccountName.value.trim() || `QQ账号${Date.now()}`
+  await addAccount({
+    id: props.editData?.id,
+    name: props.editData ? (props.editData.name || name) : name,
+    code,
+    platform: 'qq',
+    loginType: 'manual',
+    ...(parsedInput.gatewayUrl ? { gatewayUrl: parsedInput.gatewayUrl } : {}),
+    ...(parsedInput.clientVersion ? { clientVersion: parsedInput.clientVersion } : {}),
+  })
+}
+
 const wxQrImageSrc = computed(() => {
   if (!wxLoginStore.qrCode)
     return ''
@@ -465,6 +500,8 @@ function close() {
   wxLoginStore.resetState()
   qqLoginStore.resetState()
   showCaptureHelp.value = false
+  showQqManual.value = false
+  qqManualCode.value = ''
   emit('close')
 }
 
@@ -501,6 +538,8 @@ watch(() => props.show, (newVal) => {
     void cancelCaptureSession()
     wxLoginStore.resetState()
     qqLoginStore.resetState()
+    showQqManual.value = false
+    qqManualCode.value = ''
   }
 })
 
@@ -637,6 +676,45 @@ watch(activeTab, (tab) => {
             placeholder="留空则使用 QQ 昵称"
           />
 
+          <div
+            class="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700"
+            :style="{ borderColor: 'color-mix(in srgb, var(--theme-text) 20%, transparent)' }"
+          >
+            <button
+              type="button"
+              class="flex h-10 w-full items-center justify-between px-3 text-sm font-medium transition-colors hover:opacity-80"
+              :style="{ color: 'var(--theme-text)' }"
+              @click="showQqManual = !showQqManual"
+            >
+              <span class="flex items-center gap-2">
+                <span class="i-carbon-password" :style="{ color: 'var(--theme-primary)' }" />
+                手动输入 Code（F12 抓包）
+              </span>
+              <span :class="showQqManual ? 'i-carbon-chevron-up' : 'i-carbon-chevron-down'" class="opacity-60" />
+            </button>
+
+            <div v-if="showQqManual" class="space-y-3 border-t border-gray-200 px-3 py-3 dark:border-gray-700" :style="{ borderColor: 'color-mix(in srgb, var(--theme-text) 10%, transparent)' }">
+              <BaseTextarea
+                v-model="qqManualCode"
+                label="Code / WebSocket URL"
+                placeholder="粘贴 F12 抓包得到的 code 或 wss://gate-obt.nqf.qq.com/prod/ws?platform=qq&code=..."
+                :rows="3"
+              />
+
+              <div class="rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+                <div>1. 打开 QQ 农场小程序，F12 开发者工具 → Network 筛选 wss</div>
+                <div>2. 复制 WebSocket 地址中 code= 后面的内容</div>
+                <div>3. 粘贴到上方输入框后点击"添加账号"</div>
+              </div>
+
+              <div class="flex justify-end">
+                <BaseButton variant="primary" size="sm" :loading="loading" @click="submitQqManual">
+                  添加账号
+                </BaseButton>
+              </div>
+            </div>
+          </div>
+
           <div class="flex flex-col items-center justify-center py-4 space-y-4">
             <div
               v-if="qqQrImageSrc"
@@ -673,7 +751,7 @@ watch(activeTab, (tab) => {
           </div>
 
           <div class="text-center text-xs opacity-60" :style="{ color: 'var(--theme-text)' }">
-            使用 QQ 扫描二维码登录，成功后会自动添加账号
+            扫码成功后自动添加账号；若扫码失效，请使用上方"手动输入 Code"填 F12 抓包的 code
           </div>
         </div>
 
