@@ -6,6 +6,7 @@ import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseTextarea from '@/components/ui/BaseTextarea.vue'
 import { useWxLoginStore } from '@/stores/wx-login'
+import { useQqLoginStore } from '@/stores/qq-login'
 import { parseManualLoginInput } from '@/utils/gateway-url'
 
 const props = defineProps<{
@@ -20,6 +21,7 @@ const QR_AUTO_REFRESH_MS = 110_000
 const CAPTURE_SUCCESS_STORAGE_KEY = 'capture_login_succeeded'
 
 const wxLoginStore = useWxLoginStore()
+const qqLoginStore = useQqLoginStore()
 
 interface CaptureFlowState {
   id: string
@@ -42,7 +44,7 @@ interface CaptureFlowState {
   }
 }
 
-const activeTab = ref<'wx' | 'capture' | 'manual'>('manual')
+const activeTab = ref<'wx' | 'qq' | 'capture' | 'manual'>('manual')
 const loading = ref(false)
 const wxChecking = ref(false)
 const errorMessage = ref('')
@@ -59,6 +61,9 @@ const showCaptureHelp = ref(false)
 const captureHelpMode = ref<'first' | 'daily'>('first')
 const captureHelpDevice = ref<'ios' | 'android'>('ios')
 const captureFlow = ref<CaptureFlowState | null>(null)
+const qqChecking = ref(false)
+const qqAccountName = ref('')
+const QQ_AUTO_REFRESH_MS = 110_000
 
 const form = reactive({
   name: '',
@@ -171,6 +176,37 @@ const { pause: stopCaptureCheck, resume: startCaptureCheck } = useIntervalFn(asy
     captureChecking.value = false
   }
 }, 1500, { immediate: false })
+
+const { pause: stopQqCheck, resume: startQqCheck } = useIntervalFn(async () => {
+  if (activeTab.value !== 'qq' || qqLoginStore.isLoading || qqChecking.value)
+    return
+  if (shouldRefreshQqQr()) {
+    await loadQqQRCode()
+    return
+  }
+  if (qqLoginStore.status !== 'qr_ready' && qqLoginStore.status !== 'scanning')
+    return
+
+  qqChecking.value = true
+  try {
+    const result = await qqLoginStore.checkLogin()
+    if (result.success && result.code) {
+      stopQqCheck()
+      const name = qqAccountName.value.trim() || qqLoginStore.nickname || `QQ账号${Date.now()}`
+      await addAccount({
+        id: props.editData?.id,
+        name: props.editData ? (props.editData.name || name) : name,
+        code: result.code,
+        platform: 'qq',
+        loginType: 'qq_qr',
+        avatar: qqLoginStore.avatar || '',
+      })
+    }
+  }
+  finally {
+    qqChecking.value = false
+  }
+}, 2000, { immediate: false })
 
 async function loadCaptureConfig() {
   try {
@@ -308,6 +344,22 @@ async function loadWxQRCode() {
     startWxCheck()
 }
 
+function shouldRefreshQqQr() {
+  return !!qqLoginStore.qrCreatedAt
+    && (qqLoginStore.status === 'qr_ready' || qqLoginStore.status === 'scanning')
+    && Date.now() - qqLoginStore.qrCreatedAt > QQ_AUTO_REFRESH_MS
+}
+
+async function loadQqQRCode() {
+  if (activeTab.value !== 'qq' || qqLoginStore.isLoading)
+    return
+  stopQqCheck()
+  qqLoginStore.resetState()
+  const success = await qqLoginStore.getQRCode()
+  if (success)
+    startQqCheck()
+}
+
 async function addAccount(data: any) {
   loading.value = true
   errorMessage.value = ''
@@ -395,11 +447,23 @@ const wxQrImageSrc = computed(() => {
   return `data:image/png;base64,${wxLoginStore.qrCode}`
 })
 
+const qqQrImageSrc = computed(() => {
+  if (!qqLoginStore.qrImage)
+    return ''
+  if (qqLoginStore.qrImage.startsWith('data:'))
+    return qqLoginStore.qrImage
+  if (qqLoginStore.qrImage.startsWith('http'))
+    return qqLoginStore.qrImage
+  return `data:image/png;base64,${qqLoginStore.qrImage}`
+})
+
 function close() {
   stopWxCheck()
   stopCaptureCheck()
+  stopQqCheck()
   void cancelCaptureSession()
   wxLoginStore.resetState()
+  qqLoginStore.resetState()
   showCaptureHelp.value = false
   emit('close')
 }
@@ -419,6 +483,7 @@ watch(() => props.show, (newVal) => {
       form.code = props.editData.code || ''
       form.platform = props.editData.platform || 'qq'
       wxAccountName.value = props.editData.name || ''
+      qqAccountName.value = props.editData.name || ''
     }
     else {
       activeTab.value = 'manual'
@@ -426,13 +491,16 @@ watch(() => props.show, (newVal) => {
       form.code = ''
       form.platform = 'qq'
       wxAccountName.value = ''
+      qqAccountName.value = ''
     }
   }
   else {
     stopWxCheck()
     stopCaptureCheck()
+    stopQqCheck()
     void cancelCaptureSession()
     wxLoginStore.resetState()
+    qqLoginStore.resetState()
   }
 })
 
@@ -443,6 +511,8 @@ watch(activeTab, (tab) => {
   }
   if (tab === 'wx')
     loadWxQRCode()
+  if (tab === 'qq')
+    loadQqQRCode()
   if (tab !== 'capture')
     void cancelCaptureSession()
 })
@@ -487,6 +557,17 @@ watch(activeTab, (tab) => {
             @click="activeTab = 'wx'"
           >
             微信扫码
+          </button>
+          <button
+            class="flex-1 py-2 text-center text-sm font-medium transition-colors"
+            :class="activeTab === 'qq' ? 'border-b-2' : 'opacity-60'"
+            :style="{
+              color: activeTab === 'qq' ? 'var(--theme-primary)' : 'var(--theme-text)',
+              borderColor: 'var(--theme-primary)',
+            }"
+            @click="activeTab = 'qq'"
+          >
+            QQ 扫码
           </button>
           <button
             v-if="captureEnabled"
@@ -546,6 +627,53 @@ watch(activeTab, (tab) => {
 
           <div class="text-center text-xs opacity-60" :style="{ color: 'var(--theme-text)' }">
             使用微信扫描二维码登录，成功后会自动添加账号
+          </div>
+        </div>
+
+        <div v-if="activeTab === 'qq'" class="space-y-4">
+          <BaseInput
+            v-model="qqAccountName"
+            label="账号备注（可选）"
+            placeholder="留空则使用 QQ 昵称"
+          />
+
+          <div class="flex flex-col items-center justify-center py-4 space-y-4">
+            <div
+              v-if="qqQrImageSrc"
+              class="border rounded-lg p-2"
+              :style="{ borderColor: 'color-mix(in srgb, var(--theme-text) 20%, transparent)', background: '#fff' }"
+            >
+              <img :src="qqQrImageSrc" class="h-48 w-48">
+            </div>
+            <div
+              v-else
+              class="h-48 w-48 flex cursor-pointer items-center justify-center rounded-lg transition-opacity hover:opacity-80"
+              :style="{ background: 'color-mix(in srgb, var(--theme-bg) 90%, var(--theme-text))' }"
+              role="button"
+              tabindex="0"
+              @click="loadQqQRCode"
+              @keydown.enter.prevent="loadQqQRCode"
+              @keydown.space.prevent="loadQqQRCode"
+            >
+              <div v-if="qqLoginStore.isLoading" i-svg-spinners-90-ring-with-bg class="text-3xl" :style="{ color: 'var(--theme-primary)' }" />
+              <span v-else class="text-sm" :style="{ color: 'var(--theme-text)' }">点击获取二维码</span>
+            </div>
+
+            <p class="text-center text-sm" :style="{ color: 'var(--theme-text)' }">
+              {{ qqLoginStore.statusMessage }}
+            </p>
+
+            <p v-if="qqLoginStore.errorMessage" class="text-center text-sm text-red-600">
+              {{ qqLoginStore.errorMessage }}
+            </p>
+
+            <BaseButton variant="secondary" size="sm" :loading="qqLoginStore.isLoading" @click="loadQqQRCode">
+              {{ qqLoginStore.qrImage ? '刷新二维码' : '获取二维码' }}
+            </BaseButton>
+          </div>
+
+          <div class="text-center text-xs opacity-60" :style="{ color: 'var(--theme-text)' }">
+            使用 QQ 扫描二维码登录，成功后会自动添加账号
           </div>
         </div>
 
