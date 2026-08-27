@@ -231,6 +231,9 @@ class MiniProgramLoginSession {
    * 用 ticket 换取授权码
    * @param {string} ticket
    * @param {string} appid - 默认 '1112386029'
+   * @returns {{ ok: boolean, code: string, message: string }}
+   *   成功时 ok=true 且 code 为非负的授权码；
+   *   失败时 ok=false，message 携带服务端错误信息。
    */
   static async getAuthCode(ticket, appid = '1112386029') {
     try {
@@ -239,12 +242,19 @@ class MiniProgramLoginSession {
         { appid, ticket },
         { headers: this.getHeaders() }
       );
-      if (response.status !== 200) return '';
-      const { code } = response.data;
-      return code || '';
+      if (response.status !== 200) {
+        return { ok: false, code: '', message: `HTTP ${response.status}` };
+      }
+      const { code, message } = response.data || {};
+      const numeric = Number(code);
+      const valid = typeof code === 'string' ? /^\d+$/.test(code) : Number.isInteger(numeric);
+      if (!valid || numeric < 0) {
+        return { ok: false, code: '', message: message || `换取登录码失败: ${code}` };
+      }
+      return { ok: true, code: String(code), message: message || '' };
     } catch (err) {
       console.error('MP Get Auth Code Error:', err.message);
-      return '';
+      return { ok: false, code: '', message: err.message || '换取登录码失败' };
     }
   }
 }

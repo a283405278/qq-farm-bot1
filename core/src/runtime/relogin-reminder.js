@@ -124,13 +124,13 @@ function createReloginReminderService(deps) {
               stop();
               return;
             }
-            const authCode = await miniProgramLoginSession.getAuthCode(ticket, '1112386029');
-            if (!authCode) {
-              log('错误', '重登录监听失败: 未获取到新 code');
+            const auth = await miniProgramLoginSession.getAuthCode(ticket, '1112386029');
+            if (!auth.ok || !auth.code) {
+              log('错误', `重登录监听失败: 未获取到新 code (${  auth.message || '未知错误'})`);
               stop();
               return;
             }
-            applyReloginCode({ accountId, accountName, authCode, uin });
+            applyReloginCode({ accountId, accountName, authCode: auth.code, uin });
             stop();
             return;
           }
